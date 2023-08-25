@@ -51,6 +51,7 @@
 #include <drm/drm_vma_manager.h>
 
 #include "drm_internal.h"
+#include "linux/virtio_shm.h"
 
 /** @file drm_gem.c
  *
@@ -560,7 +561,12 @@ struct page **drm_gem_get_pages(struct drm_gem_object *obj)
 	mapping_set_unevictable(mapping);
 
 	for (i = 0; i < npages; i++) {
-		p = shmem_read_mapping_page(mapping, i);
+		if (strcmp(obj->dev->dev->driver->name, "virtio-ivshmem") == 0 ||
+		    strcmp(obj->dev->dev->driver->name, "virtio-guest-shm") == 0) {
+			p = virtio_shmem_allocate_page(obj->dev->dev);
+		} else {
+			p = shmem_read_mapping_page(mapping, i);
+		}
 		if (IS_ERR(p))
 			goto fail;
 		pages[i] = p;
@@ -582,6 +588,10 @@ fail:
 	while (i--) {
 		if (!pagevec_add(&pvec, pages[i]))
 			drm_gem_check_release_pagevec(&pvec);
+		if (strcmp(obj->dev->dev->driver->name, "virtio-ivshmem") == 0 ||
+		    strcmp(obj->dev->dev->driver->name, "virtio-guest-shm") == 0) {
+			virtio_shmem_free_page(obj->dev->dev, pages[i]);
+		}
 	}
 	if (pagevec_count(&pvec))
 		drm_gem_check_release_pagevec(&pvec);
@@ -630,6 +640,11 @@ void drm_gem_put_pages(struct drm_gem_object *obj, struct page **pages,
 		/* Undo the reference we took when populating the table */
 		if (!pagevec_add(&pvec, pages[i]))
 			drm_gem_check_release_pagevec(&pvec);
+
+		if (strcmp(obj->dev->dev->driver->name, "virtio-ivshmem") == 0 ||
+		    strcmp(obj->dev->dev->driver->name, "virtio-guest-shm") == 0) {
+			virtio_shmem_free_page(obj->dev->dev, pages[i]);
+		}
 	}
 	if (pagevec_count(&pvec))
 		drm_gem_check_release_pagevec(&pvec);
