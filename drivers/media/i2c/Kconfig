@@ -1630,10 +1630,14 @@ config VIDEO_THS7303
 	  module will be called ths7303.
 
 config VIDEO_IMX390
-	tristate "IMX390 Camera Driver"
-	depends on I2C && VIDEO_V4L2
-	help
-	  This is a Video4Linux2 sensor-level driver for Sony IMX390 camera.
+      tristate "Sony IMX390 sensor support"
+      depends on I2C && VIDEO_DEV
+      help
+        This is a Video4Linux2 sensor driver for the Sony
+        IMX390 camera.
+
+        To compile this driver as a module, choose M here: the
+        module will be called imx390.
 
 config VIDEO_LT6911UXC
 	tristate "Lontium LT6911UXC decoder"
