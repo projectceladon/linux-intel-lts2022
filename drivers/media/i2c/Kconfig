@@ -1251,6 +1251,15 @@ config VIDEO_MAX9286
 	  To compile this driver as a module, choose M here: the
 	  module will be called max9286.
 
+config VIDEO_TI960
+	tristate "TI960 driver support"
+	depends on I2C && VIDEO_DEV
+	help
+	  This is a driver for TI960 Deserializer.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called ti960.
+
 config VIDEO_ML86V7667
 	tristate "OKI ML86V7667 video decoder"
 	depends on VIDEO_DEV && I2C
