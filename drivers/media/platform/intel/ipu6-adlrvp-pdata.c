@@ -29,6 +29,13 @@
 #include <media/d4xx_pdata.h>
 #endif
 
+#if IS_ENABLED(CONFIG_VIDEO_MAX96712)
+#include <media/max9671x.h>
+#endif
+#if IS_ENABLED(CONFIG_VIDEO_MAX96716)
+#include <media/max9671x.h>
+#endif
+
 #include "ipu.h"
 
 #if IS_ENABLED(CONFIG_VIDEO_AR0234)
@@ -698,6 +705,223 @@ static struct ipu_isys_subdev_info d4xx_sd_3 = {
 };
 #endif
 
+#if IS_ENABLED(CONFIG_VIDEO_MAX96712)
+static struct ipu_isys_csi2_config max96712_csi2_cfg = {
+	.nlanes = 4,
+	.port = 1,
+};
+
+static struct max9671x_subdev_platform_data max96712_subdev_pdata_1 = {
+	.fsync_gpio = 0,
+	.mode = 1,
+	.suffix = 'a',
+};
+
+static struct max9671x_subdev_platform_data max96712_subdev_pdata_2 = {
+	.fsync_gpio = 0,
+	.mode = 1,
+	.suffix = 'b',
+};
+
+static struct max9671x_subdev_platform_data max96712_subdev_pdata_3 = {
+	.fsync_gpio = 0,
+	.mode = 1,
+	.suffix = 'c',
+};
+
+static struct max9671x_subdev_platform_data max96712_subdev_pdata_4 = {
+	.fsync_gpio = 0,
+	.mode = 1,
+	.suffix = 'd',
+};
+
+static struct max9671x_subdev_info max96712_subdevs[] = {
+	{
+		.board_info = {
+			.type = "max96717f_dummy",
+			.addr = 0x43,
+			.platform_data = &max96712_subdev_pdata_1,
+		},
+		.rx_port = 0,
+		/* GPP_B23	- 0 + 664*/
+		//.power_gpio = 687,
+		.phy_i2c_addr = 0x42,
+		.alias_addr = 0x43,
+		.ser_type = MAX_SER_96717F,
+	},
+	{
+		.board_info = {
+			.type = "max96717f_dummy",
+			.addr = 0x44,
+			.platform_data = &max96712_subdev_pdata_2,
+		},
+		.rx_port = 1,
+		/* GPP_B23	- 0 + 664*/
+		//.power_gpio = 687,
+		.phy_i2c_addr = 0x42,
+		.alias_addr = 0x43,
+		.ser_type = MAX_SER_96717F,
+		.suffix = 'b',
+	},
+	{
+		.board_info = {
+			.type = "max96717f_dummy",
+			.addr = 0x45,
+			.platform_data = &max96712_subdev_pdata_3,
+		},
+		.rx_port = 2,
+		/* GPP_B23	- 0 + 664*/
+		//.power_gpio = 687,
+		.phy_i2c_addr = 0x42,
+		.alias_addr = 0x43,
+		.ser_type = MAX_SER_96717F,
+		.suffix = 'c',
+	},
+	{
+		.board_info = {
+			.type = "max96717f_dummy",
+			.addr = 0x46,
+			.platform_data = &max96712_subdev_pdata_4,
+		},
+		.rx_port = 3,
+		/* GPP_B23	- 0 + 664*/
+		//.power_gpio = 687,
+		.phy_i2c_addr = 0x42,
+		.alias_addr = 0x43,
+		.ser_type = MAX_SER_96717F,
+		.suffix = 'd',
+	},
+};
+static struct max9671x_platform_data max96712_pdata = {
+	.subdev_info = max96712_subdevs,
+	.subdev_num = ARRAY_SIZE(max96712_subdevs),
+	/* GPP_D16 (840) */
+	.lock_gpio = -1,
+	/* GPP_D15 (839) */
+	.errb_gpio = -1,
+	/* GPP_D14 (838) */
+	.pwdnb_gpio = -1,
+	.errb_gpio_name = "ERRB",
+	.errb_gpio_flags =
+		IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+};
+
+static struct ipu_isys_subdev_info max96712_sd = {
+	.csi2 = &max96712_csi2_cfg,
+	.i2c = {
+		.board_info = {
+			.type = "max96712",
+			.addr = 0x29,
+			.platform_data = &max96712_pdata,
+		},
+		.i2c_adapter_bdf = "0000:00:19.1",
+	},
+};
+#endif
+
+#if IS_ENABLED(CONFIG_VIDEO_MAX96716)
+static struct ipu_isys_csi2_config max96716_csi2_cfg_1 = {
+	.nlanes = 2,
+	.port = 2,
+};
+
+static struct ipu_isys_csi2_config max96716_csi2_cfg_2 = {
+	.nlanes = 2,
+	.port = 3,
+};
+
+static struct max9671x_subdev_platform_data max96716_subdev_pdata_1 = {
+	.fsync_gpio = 0,
+	.mode = 0,
+	.suffix = 'e',
+};
+
+static struct max9671x_subdev_platform_data max96716_subdev_pdata_2 = {
+	.fsync_gpio = 0,
+	.mode = 0,
+	.suffix = 'f',
+};
+
+static struct max9671x_subdev_info max96716_subdevs_1[] = {
+	{
+		.board_info = {
+			.type = "max96717f_dummy",
+			.addr = 0x47,
+			.platform_data = &max96716_subdev_pdata_1,
+		},
+		.rx_port = 1,
+		.phy_i2c_addr = 0x42,
+		.alias_addr = 0x44,
+		.ser_type = MAX_SER_96717F,
+	},
+};
+static struct max9671x_subdev_info max96716_subdevs_2[] = {
+	{
+		.board_info = {
+			.type = "max96717f_dummy",
+			.addr = 0x48,
+			.platform_data = &max96716_subdev_pdata_2,
+		},
+		.rx_port = 0,
+		.phy_i2c_addr = 0x42,
+		.alias_addr = 0x45,
+		.ser_type = MAX_SER_96717F,
+		.suffix = 'f',
+	},
+};
+static struct max9671x_platform_data max96716_pdata_1 = {
+	.subdev_info = max96716_subdevs_1,
+	.subdev_num = ARRAY_SIZE(max96716_subdevs_1),
+	/* GPP_E4 (988) */
+	.lock_gpio = -1,
+	/* GPP_E5 (989) */
+	.errb_gpio = -1,
+	/* GPP_D9 (833) */
+	.pwdnb_gpio = -1,
+	.errb_gpio_name = "ERRB",
+	.errb_gpio_flags =
+		IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+	.suffix = 'a',
+};
+
+static struct max9671x_platform_data max96716_pdata_2 = {
+	.subdev_info = max96716_subdevs_2,
+	.subdev_num = ARRAY_SIZE(max96716_subdevs_2),
+	/* GPP_E2 (986) */
+	.lock_gpio = -1,
+	/* GPP_E3 (987) */
+	.errb_gpio = -1,
+	/* GPP_E1 (985) */
+	.pwdnb_gpio = -1,
+	.errb_gpio_name = "ERRB",
+	.errb_gpio_flags =
+		IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+	.suffix = 'b',
+};
+static struct ipu_isys_subdev_info max96716_sd_1 = {
+	.csi2 = &max96716_csi2_cfg_1,
+	.i2c = {
+		.board_info = {
+			.type = "max96716",
+			.addr = 0x2a,
+			.platform_data = &max96716_pdata_1,
+		},
+		.i2c_adapter_bdf = "0000:00:19.1",
+	},
+};
+static struct ipu_isys_subdev_info max96716_sd_2 = {
+	.csi2 = &max96716_csi2_cfg_2,
+	.i2c = {
+		.board_info = {
+			.type = "max96716",
+			.addr = 0x28,
+			.platform_data = &max96716_pdata_2,
+		},
+		.i2c_adapter_bdf = "0000:00:19.1",
+	},
+};
+#endif
+
 #if IS_ENABLED(CONFIG_INTEL_IPU6_CHIMERA)
 
 #define CHIMERA_LANES           2
@@ -911,6 +1135,13 @@ static struct ipu_isys_subdev_pdata pdata = {
 		&chimera_sd_2,
 		&chimera_sd_3,
 		&chimera_sd_4,
+#endif
+#if IS_ENABLED(CONFIG_VIDEO_MAX96712)
+		&max96712_sd,
+#endif
+#if IS_ENABLED(CONFIG_VIDEO_MAX96716)
+		&max96716_sd_1,
+		&max96716_sd_2,
 #endif
 		NULL,
 	},
