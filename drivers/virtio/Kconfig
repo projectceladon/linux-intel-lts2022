@@ -173,4 +173,24 @@ config VIRTIO_DMA_SHARED_BUFFER
 	 This option adds a flavor of dma buffers that are backed by
 	 virtio resources.
 
+config VIRTIO_IVSHMEM
+	tristate "Driver for ivshmem-based virtio front-end devices"
+	depends on PCI && !HIGHMEM
+	select VIRTIO
+	select DMA_OPS
+	select ZONE_DEVICE
+	help
+	  This provides virtio front-end devices via ivshmem shared memory
+	  devices.
+
+	  If unsure, say 'N'.
+
+config VIRTIO_IVSHMEM_DEBUG
+	tristate "Virtio ivshmem debug driver"
+	depends on VIRTIO_IVSHMEM
+	help
+	 This driver is used to debug virtio-ivshmem performance statistics.
+
+	 If unsure, say N.
+
 endif # VIRTIO_MENU
