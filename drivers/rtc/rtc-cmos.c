@@ -42,7 +42,7 @@
 #include <asm/processor.h>
 #include <linux/dmi.h>
 #endif
-
+#include "asm/hypervisor.h"
 /* this is for "generic access to PC-style RTC" using CMOS_READ/CMOS_WRITE */
 #include <linux/mc146818rtc.h>
 
@@ -1382,7 +1382,9 @@ static int cmos_pnp_probe(struct pnp_dev *pnp, const struct pnp_device_id *id)
 {
 	int irq;
 
-	if (pnp_port_start(pnp, 0) == 0x70 && !pnp_irq_valid(pnp, 0)) {
+	if (hypervisor_is_type(X86_HYPER_QNX)) {
+		irq = -1;
+	} else if (pnp_port_start(pnp, 0) == 0x70 && !pnp_irq_valid(pnp, 0)) {
 		irq = 0;
 #ifdef CONFIG_X86
 		/* Some machines contain a PNP entry for the RTC, but
