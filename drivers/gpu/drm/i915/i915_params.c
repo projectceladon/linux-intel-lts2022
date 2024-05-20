@@ -246,7 +246,40 @@ i915_param_named_unsafe(lmem_bar_size, uint, 0400,
 
 i915_param_named(max_vfs, uint, 0400,
 	"Limit number of virtual functions to allocate. "
-	"(0 = no VFs [default]; N = allow up to N VFs)");
+	"(default: no limit; N=limit to N, 0=no VFs)");
+
+#ifdef CONFIG_QNX_GUEST
+i915_param_named(initial_vfs, uint, 0400,
+	"Number of virtual functions to initialize on startup.");
+#endif
+
+#if IS_ENABLED(CONFIG_DRM_I915_DEBUG_IOV)
+i915_param_named_unsafe(vfs_flr_mask, ulong, 0600,
+	"Bitmask to enable (1) or disable (0) cleaning by PF VF's resources "
+	"(GGTT and LMEM) after FLR (default: ~0 - cleaning enable for all VFs) "
+	"Bit number indicates VF number, e.g. bit 1 indicates VF1");
+#endif
+
+static __always_inline void _print_param(struct drm_printer *p,
+					 const char *name,
+					 const char *type,
+					 const void *x)
+{
+	if (!__builtin_strcmp(type, "bool"))
+		drm_printf(p, "i915.%s=%s\n", name,
+			   str_yes_no(*(const bool *)x));
+	else if (!__builtin_strcmp(type, "int"))
+		drm_printf(p, "i915.%s=%d\n", name, *(const int *)x);
+	else if (!__builtin_strcmp(type, "unsigned int"))
+		drm_printf(p, "i915.%s=%u\n", name, *(const unsigned int *)x);
+	else if (!__builtin_strcmp(type, "unsigned long"))
+		drm_printf(p, "i915.%s=%lu\n", name, *(const unsigned long *)x);
+	else if (!__builtin_strcmp(type, "char *"))
+		drm_printf(p, "i915.%s=%s\n", name, *(const char **)x);
+	else
+		WARN_ONCE(1, "no printer defined for param type %s (i915.%s)\n",
+			  type, name);
+}
 
 static void _param_print_bool(struct drm_printer *p, const char *name,
 			      bool val)
