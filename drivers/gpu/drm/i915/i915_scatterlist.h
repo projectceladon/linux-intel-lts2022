@@ -156,10 +156,9 @@ bool i915_sg_trim(struct sg_table *orig_st);
  * struct i915_refct_sgt_ops - Operations structure for struct i915_refct_sgt
  */
 struct i915_refct_sgt_ops {
-	/**
-	 * release() - Free the memory of the struct i915_refct_sgt
-	 * @ref: struct kref that is embedded in the struct i915_refct_sgt
-	 */
+        /**
+         * @release: Free the memory of the struct i915_refct_sgt
+         */
 	void (*release)(struct kref *ref);
 };
 
