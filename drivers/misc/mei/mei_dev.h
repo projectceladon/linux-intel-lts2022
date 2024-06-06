@@ -379,6 +379,8 @@ void mei_cl_bus_rescan_work(struct work_struct *work);
 void mei_cl_bus_dev_fixup(struct mei_cl_device *dev);
 ssize_t __mei_cl_send(struct mei_cl *cl, const u8 *buf, size_t length, u8 vtag,
 		      unsigned int mode);
+ssize_t __mei_cl_send_timeout(struct mei_cl *cl, const u8 *buf, size_t length, u8 vtag,
+			      unsigned int mode, unsigned long timeout);
 ssize_t __mei_cl_recv(struct mei_cl *cl, u8 *buf, size_t length, u8 *vtag,
 		      unsigned int mode, unsigned long timeout);
 bool mei_cl_bus_rx_event(struct mei_cl *cl);
@@ -505,6 +507,7 @@ struct mei_dev_timeouts {
  * @fw_ver : FW versions
  *
  * @fw_f_fw_ver_supported : fw feature: fw version supported
+ * @fw_ver_received : fw version received
  *
  * @me_clients_rwsem: rw lock over me_clients list
  * @me_clients  : list of FW clients
@@ -597,6 +600,7 @@ struct mei_device {
 	struct mei_fw_version fw_ver[MEI_MAX_FW_VER_BLOCKS];
 
 	unsigned int fw_f_fw_ver_supported:1;
+	unsigned int fw_ver_received:1;
 
 	struct rw_semaphore me_clients_rwsem;
 	struct list_head me_clients;

@@ -442,6 +442,8 @@ int intel_guc_invalidate_tlb_full(struct intel_guc *guc);
 int intel_guc_invalidate_tlb(struct intel_guc *guc);
 int intel_guc_tlb_invalidation_done(struct intel_guc *guc, const u32 *hxg,
 				    u32 size);
+int intel_guc_enable_gsc_engine(struct intel_guc *guc);
+int intel_guc_disable_gsc_engine(struct intel_guc *guc);
 
 static inline bool intel_guc_is_supported(const struct intel_guc *guc)
 {

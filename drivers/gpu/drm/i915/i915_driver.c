@@ -779,8 +779,6 @@ static void i915_virtualization_probe(struct drm_i915_private *i915)
  */
 int i915_driver_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
-	const struct intel_device_info *match_info =
-		(struct intel_device_info *)ent->driver_data;
 	struct drm_i915_private *i915;
 	int ret;
 
@@ -837,7 +835,9 @@ int i915_driver_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (ret)
 		goto out_cleanup_modeset2;
 
-	intel_pxp_init(i915);
+	ret = intel_pxp_init(i915);
+	if (ret != -ENODEV)
+		drm_dbg(&i915->drm, "pxp init failed with %d\n", ret);
 
 	ret = intel_display_driver_probe(i915);
 	if (ret)

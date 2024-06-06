@@ -18,6 +18,8 @@
 #include "gt/iov/intel_iov_state.h"
 #include "gt/iov/intel_iov_utils.h"
 
+#include "pxp/intel_pxp.h"
+
 /* safe for use before register access via uncore is completed */
 static u32 pci_peek_mmio_read32(struct pci_dev *pdev, i915_reg_t reg)
 {
@@ -413,6 +415,50 @@ static int pf_update_guc_clients(struct intel_iov *iov, unsigned int num_vfs)
 	return err;
 }
 
+static int pf_enable_gsc_engine(struct drm_i915_private *i915)
+{
+	struct intel_gt *gt;
+	unsigned int id;
+	int err;
+
+	GEM_BUG_ON(!IS_SRIOV_PF(i915));
+
+	for_each_gt(gt, i915, id) {
+		err = intel_guc_enable_gsc_engine(&gt->uc.guc);
+		if (err < 0)
+			return err;
+	}
+
+	err = intel_pxp_init(i915);
+	/*
+	 * XXX: Ignore -ENODEV error.
+	 * It this case, there is no need to reinitialize PXP
+	 */
+	return (err < 0 && err != -ENODEV) ? err : 0;
+}
+
+static int pf_disable_gsc_engine(struct drm_i915_private *i915)
+{
+	struct intel_gt *gt;
+	unsigned int id;
+
+	GEM_BUG_ON(!IS_SRIOV_PF(i915));
+
+	for_each_gt(gt, i915, id)
+		intel_gsc_uc_flush_work(&gt->uc.gsc);
+
+	intel_pxp_fini(i915);
+
+	for_each_gt(gt, i915, id) {
+		int err = intel_guc_disable_gsc_engine(&gt->uc.guc);
+
+		if (err < 0)
+			return err;
+	}
+
+	return 0;
+}
+
 /**
  * i915_sriov_pf_enable_vfs - Enable VFs.
  * @i915: the i915 struct
@@ -445,6 +491,13 @@ int i915_sriov_pf_enable_vfs(struct drm_i915_private *i915, int num_vfs)
 	/* hold the reference to runtime pm as long as VFs are enabled */
 	for_each_gt(gt, i915, id)
 		intel_iov_pf_get_pm_vfs(&gt->iov);
+
+	/* Wa_14019103365 */
+	if (IS_METEORLAKE(i915)) {
+		err = pf_disable_gsc_engine(i915);
+		if (err)
+			drm_warn(&i915->drm, "Failed to disable GSC engine (%pe)\n", ERR_PTR(err));
+	}
 
 	for_each_gt(gt, i915, id) {
 		err = intel_iov_provisioning_verify(&gt->iov, num_vfs);
@@ -505,11 +558,12 @@ static void pf_start_vfs_flr(struct intel_iov *iov, unsigned int num_vfs)
 		intel_iov_state_start_flr(iov, n);
 }
 
-#define I915_VF_FLR_TIMEOUT_MS 500
+#define I915_VF_FLR_TIMEOUT_MS 1000
 
-static void pf_wait_vfs_flr(struct intel_iov *iov, unsigned int num_vfs)
+static unsigned int pf_wait_vfs_flr(struct intel_iov *iov, unsigned int num_vfs,
+				    unsigned int timeout_ms)
 {
-	unsigned int timeout_ms = I915_VF_FLR_TIMEOUT_MS;
+	unsigned int timed_out = 0;
 	unsigned int n;
 
 	GEM_BUG_ON(!intel_iov_is_pf(iov));
@@ -519,8 +573,10 @@ static void pf_wait_vfs_flr(struct intel_iov *iov, unsigned int num_vfs)
 			IOV_ERROR(iov, "VF%u FLR didn't complete within %u ms\n",
 				  n, timeout_ms);
 			timeout_ms /= 2;
+			timed_out++;
 		}
 	}
+	return timed_out;
 }
 
 /**
@@ -538,6 +594,7 @@ int i915_sriov_pf_disable_vfs(struct drm_i915_private *i915)
 	struct pci_dev *pdev = to_pci_dev(dev);
 	u16 num_vfs = pci_num_vf(pdev);
 	u16 vfs_assigned = pci_vfs_assigned(pdev);
+	unsigned int in_flr = 0;
 	struct intel_gt *gt;
 	unsigned int id;
 
@@ -560,11 +617,26 @@ int i915_sriov_pf_disable_vfs(struct drm_i915_private *i915)
 	for_each_gt(gt, i915, id)
 		pf_start_vfs_flr(&gt->iov, num_vfs);
 	for_each_gt(gt, i915, id)
-		pf_wait_vfs_flr(&gt->iov, num_vfs);
+		pf_wait_vfs_flr(&gt->iov, num_vfs, I915_VF_FLR_TIMEOUT_MS);
 
 	for_each_gt(gt, i915, id) {
+		/* unprovisioning wont work if FLR didn't finish */
+		in_flr = pf_wait_vfs_flr(&gt->iov, num_vfs, 0);
+		if (in_flr) {
+			gt_warn(gt, "Can't unprovision %u VFs, %u FLRs are still in progress\n",
+				 num_vfs, in_flr);
+			continue;
+		}
 		pf_update_guc_clients(&gt->iov, 0);
 		intel_iov_provisioning_auto(&gt->iov, 0);
+	}
+
+	/* Wa_14019103365 */
+	if (IS_METEORLAKE(i915)) {
+		int err = pf_enable_gsc_engine(i915);
+
+		if (err)
+			dev_warn(dev, "Failed to re-enable GSC engine (%pe)\n", ERR_PTR(err));
 	}
 
 	for_each_gt(gt, i915, id)

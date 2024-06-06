@@ -926,6 +926,34 @@ int intel_guc_self_cfg64(struct intel_guc *guc, u16 key, u64 value)
 	return __guc_self_cfg(guc, key, 2, value);
 }
 
+int intel_guc_enable_gsc_engine(struct intel_guc *guc)
+{
+	struct intel_gt *gt = guc_to_gt(guc);
+
+	if (!HAS_ENGINE(gt, GSC0))
+		return 0;
+
+	return intel_guc_set_engine_sched(guc, GUC_GSC_OTHER_CLASS, SET_ENGINE_SCHED_FLAGS_ENABLE);
+}
+
+int intel_guc_disable_gsc_engine(struct intel_guc *guc)
+{
+	struct intel_gt *gt = guc_to_gt(guc);
+	int err;
+
+	if (!HAS_ENGINE(gt, GSC0))
+		return 0;
+
+	if (wait_for(intel_engine_is_idle(gt->engine[GSC0]), I915_GEM_IDLE_TIMEOUT))
+		return -EBUSY;
+
+	err = intel_guc_set_engine_sched(guc, GUC_GSC_OTHER_CLASS, 0);
+	if (err < 0)
+		return err;
+
+	return __intel_gt_reset(gt, gt->engine[GSC0]->mask);
+}
+
 /**
  * intel_guc_load_status - dump information about GuC load status
  * @guc: the GuC
