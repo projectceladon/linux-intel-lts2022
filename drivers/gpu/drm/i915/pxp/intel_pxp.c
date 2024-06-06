@@ -164,8 +164,8 @@ static struct intel_gt *find_gt_for_required_teelink(struct drm_i915_private *i9
 	 * for HuC authentication. For now, its limited to DG2.
 	 */
 	if (IS_ENABLED(CONFIG_INTEL_MEI_PXP) && IS_ENABLED(CONFIG_INTEL_MEI_GSC) &&
-	    intel_huc_is_loaded_by_gsc(&i915->gt0.uc.huc) && intel_uc_uses_huc(&i915->gt0.uc))
-		return &i915->gt0;
+	    intel_huc_is_loaded_by_gsc(&to_gt(i915)->uc.huc) && intel_uc_uses_huc(&to_gt(i915)->uc))
+		return to_gt(i915);
 
 	return NULL;
 }
@@ -190,8 +190,8 @@ static struct intel_gt *find_gt_for_required_protected_content(struct drm_i915_p
 	 * Else we rely on mei-pxp module but only on legacy platforms
 	 * prior to having separate media GTs and has a valid VDBOX.
 	 */
-	if (IS_ENABLED(CONFIG_INTEL_MEI_PXP) && !i915->media_gt && VDBOX_MASK(&i915->gt0))
-		return &i915->gt0;
+	if (IS_ENABLED(CONFIG_INTEL_MEI_PXP) && !i915->media_gt && VDBOX_MASK(to_gt(i915)))
+		return to_gt(i915);
 
 	return NULL;
 }
@@ -200,6 +200,9 @@ int intel_pxp_init(struct drm_i915_private *i915)
 {
 	struct intel_gt *gt;
 	bool is_full_feature = false;
+
+	if (intel_gt_is_wedged(to_gt(i915)))
+		return -ENOTCONN;
 
 	/*
 	 * NOTE: Get the ctrl_gt before checking intel_pxp_is_supported since
@@ -262,6 +265,7 @@ void intel_pxp_fini(struct drm_i915_private *i915)
 
 void intel_pxp_mark_termination_in_progress(struct intel_pxp *pxp)
 {
+	pxp->hw_state_invalidated = true;
 	pxp->arb_session.is_valid = false;
 	pxp->arb_session.tag = 0;
 	reinit_completion(&pxp->termination);
@@ -308,6 +312,8 @@ static int __pxp_global_teardown_final(struct intel_pxp *pxp)
 
 	if (!pxp->arb_session.is_valid)
 		return 0;
+
+	drm_dbg(&pxp->ctrl_gt->i915->drm, "PXP: teardown for suspend/fini");
 	/*
 	 * To ensure synchronous and coherent session teardown completion
 	 * in response to suspend or shutdown triggers, don't use a worker.
@@ -329,6 +335,8 @@ static int __pxp_global_teardown_restart(struct intel_pxp *pxp)
 
 	if (pxp->arb_session.is_valid)
 		return 0;
+
+	drm_dbg(&pxp->ctrl_gt->i915->drm, "PXP: teardown for restart");
 	/*
 	 * The arb-session is currently inactive and we are doing a reset and restart
 	 * due to a runtime event. Use the worker that was designed for this.
@@ -337,8 +345,11 @@ static int __pxp_global_teardown_restart(struct intel_pxp *pxp)
 
 	timeout = intel_pxp_get_backend_timeout_ms(pxp);
 
-	if (!wait_for_completion_timeout(&pxp->termination, msecs_to_jiffies(timeout)))
+	if (!wait_for_completion_timeout(&pxp->termination, msecs_to_jiffies(timeout))) {
+		drm_dbg(&pxp->ctrl_gt->i915->drm, "PXP: restart backend timed out (%d ms)",
+			timeout);
 		return -ETIMEDOUT;
+	}
 
 	return 0;
 }
@@ -364,22 +375,46 @@ void intel_pxp_end(struct intel_pxp *pxp)
 	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
 }
 
+static bool pxp_required_fw_failed(struct intel_pxp *pxp)
+{
+	if (__intel_uc_fw_status(&pxp->ctrl_gt->uc.huc.fw) == INTEL_UC_FIRMWARE_LOAD_FAIL)
+		return true;
+	if (HAS_ENGINE(pxp->ctrl_gt, GSC0) &&
+	    __intel_uc_fw_status(&pxp->ctrl_gt->uc.gsc.fw) == INTEL_UC_FIRMWARE_LOAD_FAIL)
+		return true;
+
+	return false;
+}
+
+static bool pxp_fw_dependencies_completed(struct intel_pxp *pxp)
+{
+	if (HAS_ENGINE(pxp->ctrl_gt, GSC0))
+		return intel_pxp_gsccs_is_ready_for_sessions(pxp);
+
+	return pxp_component_bound(pxp);
+}
+
 /*
  * this helper is used by both intel_pxp_start and by
  * the GET_PARAM IOCTL that user space calls. Thus, the
  * return values here should match the UAPI spec.
  */
-int intel_pxp_get_readiness_status(struct intel_pxp *pxp)
+int intel_pxp_get_readiness_status(struct intel_pxp *pxp, int timeout_ms)
 {
 	if (!intel_pxp_is_enabled(pxp))
 		return -ENODEV;
 
-	if (HAS_ENGINE(pxp->ctrl_gt, GSC0)) {
-		if (wait_for(intel_pxp_gsccs_is_ready_for_sessions(pxp), 250))
+	if (pxp_required_fw_failed(pxp))
+		return -ENODEV;
+
+	if (pxp->platform_cfg_is_bad)
+		return -ENODEV;
+
+	if (timeout_ms) {
+		if (wait_for(pxp_fw_dependencies_completed(pxp), timeout_ms))
 			return 2;
-	} else {
-		if (wait_for(pxp_component_bound(pxp), 250))
-			return 2;
+	} else if (!pxp_fw_dependencies_completed(pxp)) {
+		return 2;
 	}
 	return 1;
 }
@@ -388,15 +423,19 @@ int intel_pxp_get_readiness_status(struct intel_pxp *pxp)
  * the arb session is restarted from the irq work when we receive the
  * termination completion interrupt
  */
+#define PXP_READINESS_TIMEOUT 250
+
 int intel_pxp_start(struct intel_pxp *pxp)
 {
 	int ret = 0;
 
-	ret = intel_pxp_get_readiness_status(pxp);
-	if (ret < 0)
+	ret = intel_pxp_get_readiness_status(pxp, PXP_READINESS_TIMEOUT);
+	if (ret < 0) {
+		drm_dbg(&pxp->ctrl_gt->i915->drm, "PXP: tried but not-avail (%d)", ret);
 		return ret;
-	else if (ret > 1)
+	} else if (ret > 1) {
 		return -EIO; /* per UAPI spec, user may retry later */
+	}
 
 	mutex_lock(&pxp->arb_mutex);
 
@@ -552,6 +591,68 @@ static int pxp_set_session_status(struct intel_pxp *pxp,
 	return ret;
 }
 
+static bool ioctl_buffer_size_valid(u32 size)
+{
+	return size > 0 && size <= SZ_64K;
+}
+
+static int
+intel_pxp_ioctl_io_message(struct intel_pxp *pxp, struct drm_file *drmfile,
+			   struct prelim_drm_i915_pxp_tee_io_message_params *params)
+{
+	struct drm_i915_private *i915 = pxp->ctrl_gt->i915;
+	void *msg_in = NULL;
+	void *msg_out = NULL;
+	int ret = 0;
+
+	if (!params->msg_in || !params->msg_out ||
+	    !ioctl_buffer_size_valid(params->msg_out_buf_size) ||
+	    !ioctl_buffer_size_valid(params->msg_in_size))
+		return -EINVAL;
+
+	msg_in = kzalloc(params->msg_in_size, GFP_KERNEL);
+	if (!msg_in)
+		return -ENOMEM;
+
+	msg_out = kzalloc(params->msg_out_buf_size, GFP_KERNEL);
+	if (!msg_out) {
+		ret = -ENOMEM;
+		goto end;
+	}
+
+	if (copy_from_user(msg_in, u64_to_user_ptr(params->msg_in), params->msg_in_size)) {
+		drm_dbg(&i915->drm, "Failed to copy_from_user for TEE message\n");
+		ret = -EFAULT;
+		goto end;
+	}
+
+	if (HAS_ENGINE(pxp->ctrl_gt, GSC0))
+		ret = intel_pxp_gsccs_client_io_msg(pxp, drmfile,
+						    msg_in, params->msg_in_size,
+						    msg_out, params->msg_out_buf_size,
+						    &params->msg_out_ret_size);
+	else
+		ret = intel_pxp_tee_io_message(pxp,
+					       msg_in, params->msg_in_size,
+					       msg_out, params->msg_out_buf_size,
+					       &params->msg_out_ret_size);
+	if (ret) {
+		drm_dbg(&i915->drm, "Failed to send/receive user TEE message\n");
+		goto end;
+	}
+
+	if (copy_to_user(u64_to_user_ptr(params->msg_out), msg_out, params->msg_out_ret_size)) {
+		drm_dbg(&i915->drm, "Failed copy_to_user for TEE message\n");
+		ret = -EFAULT;
+		goto end;
+	}
+
+end:
+	kfree(msg_in);
+	kfree(msg_out);
+	return ret;
+}
+
 static int pxp_send_tee_msg(struct intel_pxp *pxp,
 			    struct prelim_drm_i915_pxp_ops *pxp_ops,
 			    struct drm_file *drmfile)
@@ -565,7 +666,7 @@ static int pxp_send_tee_msg(struct intel_pxp *pxp,
 	if (copy_from_user(&params, uparams, sizeof(params)) != 0)
 		return -EFAULT;
 
-	ret = intel_pxp_tee_ioctl_io_message(pxp, &params);
+	ret = intel_pxp_ioctl_io_message(pxp, drmfile, &params);
 	if (ret >= 0) {
 		pxp_ops->status = ret;
 
@@ -604,6 +705,60 @@ static int pxp_query_tag(struct intel_pxp *pxp, struct prelim_drm_i915_pxp_ops *
 	return ret;
 }
 
+static int
+pxp_process_host_session_handle_request(struct intel_pxp *pxp,
+					struct prelim_drm_i915_pxp_ops *pxp_ops,
+					struct drm_file *drmfile)
+{
+	struct prelim_drm_i915_pxp_host_session_handle_request params;
+	struct prelim_drm_i915_pxp_host_session_handle_request __user *uparams =
+		u64_to_user_ptr(pxp_ops->params);
+	int ret = 0;
+
+	if (copy_from_user(&params, uparams, sizeof(params)) != 0)
+		return -EFAULT;
+
+	if (params.request_type != PRELIM_DRM_I915_PXP_GET_HOST_SESSION_HANDLE) {
+		ret = PRELIM_DRM_I915_PXP_OP_STATUS_ERROR_INVALID;
+		goto error_out;
+	}
+
+	/* legacy hw doesn't use this - user space shouldn't be requesting this */
+	if (!HAS_ENGINE(pxp->ctrl_gt, GSC0)) {
+		ret = PRELIM_DRM_I915_PXP_OP_STATUS_ERROR_INVALID;
+		goto error_out;
+	}
+
+	intel_pxp_gsccs_get_client_host_session_handle(pxp, drmfile,
+						       &params.host_session_handle);
+	if (!params.host_session_handle) {
+		ret = PRELIM_DRM_I915_PXP_OP_STATUS_ERROR_UNKNOWN;
+		drm_warn(&pxp->ctrl_gt->i915->drm, "Host Session Handle allocated 0x0\n");
+	}
+
+error_out:
+	if (ret >= 0) {
+		pxp_ops->status = ret;
+
+		if (copy_to_user(uparams, &params, sizeof(params)))
+			ret = -EFAULT;
+		else
+			ret = 0;
+	}
+
+	return ret;
+}
+
+static bool pxp_action_needs_arb_session(u32 action)
+{
+	switch (action) {
+	case PRELIM_DRM_I915_PXP_ACTION_HOST_SESSION_HANDLE_REQ:
+		return false;
+	}
+
+	return true;
+}
+
 int i915_pxp_ops_ioctl(struct drm_device *dev, void *data, struct drm_file *drmfile)
 {
 	int ret = 0;
@@ -615,10 +770,6 @@ int i915_pxp_ops_ioctl(struct drm_device *dev, void *data, struct drm_file *drmf
 	if (!intel_pxp_is_enabled(pxp))
 		return -ENODEV;
 
-	/* At the moment, we only support multi-session on pre-MTL */
-	if (HAS_ENGINE(pxp->ctrl_gt, GSC0))
-		return -ENODEV;
-
 	wakeref = intel_runtime_pm_get_if_in_use(&i915->runtime_pm);
 	if (!wakeref) {
 		drm_dbg(&i915->drm, "pxp ioctl blocked due to state in suspend\n");
@@ -626,18 +777,28 @@ int i915_pxp_ops_ioctl(struct drm_device *dev, void *data, struct drm_file *drmf
 		return 0;
 	}
 
-	if (!intel_pxp_is_active(pxp)) {
-		ret = intel_pxp_start(pxp);
-		if (ret)
+	if (pxp_action_needs_arb_session(pxp_ops->action)) {
+		if (pxp->hw_state_invalidated) {
+			drm_dbg(&i915->drm, "pxp ioctl retry required due to state attacked\n");
+			pxp_ops->status = PRELIM_DRM_I915_PXP_OP_STATUS_RETRY_REQUIRED;
 			goto out_pm;
+		}
+
+		if (!intel_pxp_is_active(pxp)) {
+			ret = intel_pxp_start(pxp);
+			if (ret)
+				goto out_pm;
+		}
 	}
 
 	mutex_lock(&pxp->session_mutex);
 
-	if (pxp->hw_state_invalidated) {
-		drm_dbg(&i915->drm, "pxp ioctl retry required due to state attacked\n");
-		pxp_ops->status = PRELIM_DRM_I915_PXP_OP_STATUS_RETRY_REQUIRED;
-		goto out_unlock;
+	if (HAS_ENGINE(pxp->ctrl_gt, GSC0)) {
+		ret = intel_gsccs_alloc_client_resources(pxp, drmfile);
+		if (ret) {
+			drm_warn(&i915->drm, "GSCCS drm-client allocation failure\n");
+			goto out_unlock;
+		}
 	}
 
 	switch (pxp_ops->action) {
@@ -649,6 +810,9 @@ int i915_pxp_ops_ioctl(struct drm_device *dev, void *data, struct drm_file *drmf
 		break;
 	case PRELIM_DRM_I915_PXP_ACTION_QUERY_PXP_TAG:
 		ret = pxp_query_tag(pxp, pxp_ops);
+		break;
+	case PRELIM_DRM_I915_PXP_ACTION_HOST_SESSION_HANDLE_REQ:
+		ret = pxp_process_host_session_handle_request(pxp, pxp_ops, drmfile);
 		break;
 	default:
 		ret = -EINVAL;
@@ -670,6 +834,8 @@ void intel_pxp_close(struct intel_pxp *pxp, struct drm_file *drmfile)
 
 	mutex_lock(&pxp->session_mutex);
 	intel_pxp_file_close(pxp, drmfile);
+	if (HAS_ENGINE(pxp->ctrl_gt, GSC0))
+		intel_gsccs_free_client_resources(pxp, drmfile);
 	mutex_unlock(&pxp->session_mutex);
 }
 

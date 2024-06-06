@@ -52,7 +52,7 @@ static bool is_pte_replicable(struct intel_iov *iov, gen8_pte_t pte)
 int intel_iov_ggtt_vf_update_pte(struct intel_iov *iov, u32 offset, gen8_pte_t pte)
 {
 	struct intel_iov_vf_ggtt_ptes *buffer = &iov->vf.ptes_buffer;
-	u8 max_copies = FIELD_MAX(VF2PF_MMIO_UPDATE_GGTT_REQUEST_MSG_1_NUM_COPIES);
+	u8 max_copies = (u8)FIELD_MAX(VF2PF_MMIO_UPDATE_GGTT_REQUEST_MSG_1_NUM_COPIES);
 	u8 max_ptes = MMIO_UPDATE_GGTT_MAX_PTES;
 	u32 pte_offset = (offset >> PAGE_SHIFT) - (iov->vf.config.ggtt_base >> PAGE_SHIFT);
 
@@ -133,7 +133,7 @@ flush:
 int intel_iov_ggtt_vf_flush_ptes(struct intel_iov *iov)
 {
 	struct intel_iov_vf_ggtt_ptes *buffer = &iov->vf.ptes_buffer;
-	int err;
+	int err = 0;
 
 	GEM_BUG_ON(!intel_iov_is_vf(iov));
 
