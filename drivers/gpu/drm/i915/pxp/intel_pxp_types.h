@@ -165,6 +165,8 @@ struct intel_pxp {
 #define PXP_TERMINATION_COMPLETE BIT(1)
 #define PXP_INVAL_REQUIRED       BIT(2)
 #define PXP_EVENT_TYPE_IRQ       BIT(3)
+#define PXP_DISPLAY_TRIGGERED    BIT(4)
+#define PXP_PER_FW_REQUEST       BIT(5)
 };
 
 #endif /* __INTEL_PXP_TYPES_H__ */
