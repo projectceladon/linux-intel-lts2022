@@ -133,8 +133,12 @@ int virtio_gpu_find_vqs(struct virtio_gpu_device *vgdev)
 	int i, total_vqs, err;
 	const char **names;
 	int ret = 0;
+	int hdcp_vq = 0;
 
-	total_vqs = vgdev->num_vblankq + 2;
+	if (vgdev->has_hdcp)
+		hdcp_vq = 1;
+
+	total_vqs = vgdev->num_vblankq + 2 + hdcp_vq;
 	vqs = kcalloc(total_vqs, sizeof(*vqs), GFP_KERNEL);
 	callbacks = kmalloc_array(total_vqs, sizeof(vq_callback_t *),
 				  GFP_KERNEL);
@@ -149,7 +153,11 @@ int virtio_gpu_find_vqs(struct virtio_gpu_device *vgdev)
 	callbacks[1] = virtio_gpu_cursor_ack;
 	names[0] = "control";
 	names[1] = "cursor";
-	for (i = 2; i < total_vqs; i++) {
+	if (hdcp_vq) {
+		callbacks[2] = virtio_gpu_hdcp_ack;
+		names[2] = "hdcp";
+	}
+	for (i = 2 + hdcp_vq; i < total_vqs; i++) {
 		callbacks[i] = virtio_gpu_vblank_ack;
 		names[i] = "vblank";
 	}
@@ -160,9 +168,12 @@ int virtio_gpu_find_vqs(struct virtio_gpu_device *vgdev)
 
 	vgdev->ctrlq.vq = vqs[0];
 	vgdev->cursorq.vq = vqs[1];
+	if (hdcp_vq) {
+		vgdev->hdcpq.vq = vqs[2];
+	}
 
-	for (i = 2; i < total_vqs; i++)
-		vgdev->vblank[i-2].vblank.vq = vqs[i];
+	for (i = 2 + hdcp_vq; i < total_vqs; i++)
+		vgdev->vblank[i - 2 - hdcp_vq].vblank.vq = vqs[i];
 
 	ret = 0;
 out:
@@ -306,6 +317,10 @@ int virtio_gpu_init(struct virtio_device *vdev, struct drm_device *dev)
 	if (virtio_has_feature(vgdev->vdev, VIRTIO_GPU_F_MULTI_PLANAR_FORMAT)) {
 		vgdev->has_multi_planar = true;
 	}
+	if (virtio_has_feature(vgdev->vdev, VIRTIO_GPU_F_HDCP)) {
+		vgdev->has_hdcp = true;
+	}
+
 	if (virtio_has_feature(vgdev->vdev, VIRTIO_GPU_F_RESOURCE_BLOB)) {
 		vgdev->has_resource_blob = true;
 		if (virtio_has_feature(vgdev->vdev, VIRTIO_GPU_F_MODIFIER)) {
@@ -355,6 +370,9 @@ int virtio_gpu_init(struct virtio_device *vdev, struct drm_device *dev)
 
 	for(i=0; i<vgdev->num_vblankq; i++)
 		spin_lock_init(&vgdev->vblank[i].vblank.qlock);
+
+	if(vgdev->has_hdcp)
+		virtio_gpu_init_vq(&vgdev->hdcpq, virtio_gpu_dequeue_hdcp_func);
 
 	ret = virtio_gpu_find_vqs(vgdev);
 	if (ret) {
@@ -413,6 +431,8 @@ int virtio_gpu_init(struct virtio_device *vdev, struct drm_device *dev)
 	}
 
 	virtio_gpu_vblankq_notify(vgdev);
+	if(vgdev->has_hdcp)
+		virtio_gpu_hdcp_notify(vgdev);
 
 	for(i=0; i < vgdev->num_vblankq; i++)
 		virtqueue_disable_cb(vgdev->vblank[i].vblank.vq);

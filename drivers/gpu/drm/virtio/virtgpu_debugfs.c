@@ -109,6 +109,50 @@ static struct drm_info_list virtio_gpu_debugfs_list[] = {
 
 #define VIRTIO_GPU_DEBUGFS_ENTRIES ARRAY_SIZE(virtio_gpu_debugfs_list)
 
+static int hdcp_sink_capability_show(struct seq_file *m, void *data)
+{
+	struct virtio_gpu_output *output = m->private;
+	struct drm_connector *connector = &output->conn;
+
+        seq_printf(m, "%s:%d HDCP version: ", connector->name,
+                   connector->base.id);
+
+	if (output->hdcp.connector_hdcp2 == 3)
+		seq_puts(m, "HDCP1.4 HDCP2.2");
+	else if (output->hdcp.connector_hdcp2 == 2)
+		seq_puts(m, "HDCP2.2");
+	else if (output->hdcp.connector_hdcp2 == 1)
+		seq_puts(m, "HDCP1.4");
+	else
+		seq_puts(m, "None");
+
+	seq_puts(m, "\n");
+        return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(hdcp_sink_capability);
+
+static void
+virtio_gpu_connector_debugfs_init(struct virtio_gpu_output *output)
+{
+	struct drm_connector *connector = &output->conn;
+	struct dentry *root = connector->debugfs_entry;
+	debugfs_create_file("hdcp_sink_capability", S_IRUGO, root,
+			output, &hdcp_sink_capability_fops);
+}
+
+void
+virtio_gpu_debugfs_late_init(struct virtio_gpu_device *vgpudev)
+{
+
+	struct virtio_gpu_output *output;
+	int i;
+	for(i = 0; i < vgpudev->num_scanouts; i++) {
+		output = &vgpudev->outputs[i];
+		if (vgpudev->has_hdcp)
+			virtio_gpu_connector_debugfs_init(output);
+	}
+}
+
 void
 virtio_gpu_debugfs_init(struct drm_minor *minor)
 {
