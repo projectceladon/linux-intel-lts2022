@@ -192,3 +192,4 @@ obj-$(CONFIG_MOST)		+= most/
 obj-$(CONFIG_PECI)		+= peci/
 obj-$(CONFIG_HTE)		+= hte/
 obj-$(CONFIG_X86_TCC_PTCM)	+= tcc/
+obj-y				+= evdi/
