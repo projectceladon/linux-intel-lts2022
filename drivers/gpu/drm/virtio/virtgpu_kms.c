@@ -161,6 +161,65 @@ out:
 	return ret;
 }
 
+static int virtio_backlight_device_update_status(struct backlight_device *bd)
+{
+	int ret = 0;
+	struct virtio_gpu_backlight *backlight = bl_get_data(bd);
+	backlight->power = bd->props.power;
+	backlight->brightness = bd->props.brightness;
+	ret = virtio_gpu_cmd_backlight_update_status(backlight->vgdev, backlight->backlight_id);
+	return ret;
+}
+
+static int virtio_backlight_device_get_brightness(struct backlight_device *bd)
+{
+	int ret = 0;
+	struct virtio_gpu_backlight *backlight = bl_get_data(bd);
+	ret = virtio_gpu_cmd_get_brightness(backlight->vgdev, backlight->backlight_id);
+	return backlight->brightness;
+}
+
+static const struct backlight_ops virtio_backlight_device_ops = {
+	.update_status = virtio_backlight_device_update_status,
+	.get_brightness = virtio_backlight_device_get_brightness,
+};
+
+int virtio_backlight_device_register(struct virtio_gpu_device *vgdev, int index)
+{
+	struct backlight_properties props;
+	char *name;
+	struct backlight_device *bd;
+	int ret = 0;
+	memset(&props, 0, sizeof(props));
+	if (index >= vgdev->num_backlight) {
+		return -EINVAL;
+	}
+	vgdev->backlight[index].vgdev = vgdev;
+	ret = virtio_gpu_cmd_backlight_query(vgdev, index);
+	if (ret) {
+		pr_err("fail to query backlight(%d) device config, ret:%d", index, ret);
+		return ret;
+	}
+
+	props.type = vgdev->backlight[index].type;
+	props.power = vgdev->backlight[index].power;
+	props.scale = vgdev->backlight[index].scale;
+	props.brightness = vgdev->backlight[index].brightness;
+	props.max_brightness = vgdev->backlight[index].max_brightness;
+	name = kasprintf(GFP_KERNEL, "virtio-gpu-backlight%d", index);
+	bd = devm_backlight_device_register(&vgdev->vdev->dev, name, &vgdev->vdev->dev,
+			                    &vgdev->backlight[index], &virtio_backlight_device_ops, &props);
+	if (IS_ERR(bd)) {
+		DRM_ERROR("failed to register backlight device\n");
+		kfree(name);
+		return PTR_ERR(bd);
+	}
+	vgdev->backlight[index].bd = bd;
+	DRM_INFO("backlight device:%s registered\n", name);
+	kfree(name);
+	return 0;
+}
+
 int virtio_gpu_init(struct virtio_device *vdev, struct drm_device *dev)
 {
 	struct virtio_gpu_device *vgdev;
@@ -219,6 +278,9 @@ int virtio_gpu_init(struct virtio_device *vdev, struct drm_device *dev)
 	}
 	if (virtio_has_feature(vgdev->vdev, VIRTIO_GPU_F_VBLANK)) {
 		vgdev->has_vblank = true;
+	}
+	if (virtio_has_feature(vgdev->vdev, VIRTIO_GPU_F_BACKLIGHT)) {
+		vgdev->has_backlight = true;
 	}
 	if (virtio_has_feature(vgdev->vdev, VIRTIO_GPU_F_RESOURCE_BLOB)) {
 		vgdev->has_resource_blob = true;
@@ -295,6 +357,18 @@ int virtio_gpu_init(struct virtio_device *vdev, struct drm_device *dev)
 	virtio_cread_le(vgdev->vdev, struct virtio_gpu_config,
 			num_capsets, &num_capsets);
 	DRM_INFO("number of cap sets: %d\n", num_capsets);
+
+	vgdev->num_backlight = 0;
+	if (vgdev->has_backlight) {
+		virtio_cread_le(vgdev->vdev, struct virtio_gpu_config,
+				num_backlight, &vgdev->num_backlight);
+		if (vgdev->num_backlight > MAX_BACKLIGHT_NUM)
+			vgdev->num_backlight = MAX_BACKLIGHT_NUM;
+	}
+	DRM_INFO("number of virtio backlight: %d\n", vgdev->num_backlight);
+	for(i = 0; i < vgdev->num_backlight; i++) {
+		virtio_backlight_device_register(vgdev, i);
+	}
 
 	ret = virtio_gpu_modeset_init(vgdev);
 	if (ret) {
