@@ -75,6 +75,19 @@
 
 #define VIRTIO_GPU_F_VBLANK     7
 
+/*
+ * VIRTIO_GPU_CMD_FLUSH_SPRITE
+ * VIRTIO_GPU_CMD_FLUSH_SYNC
+ * VIRTIO_GPU_CMD_GET_PLANES
+ */
+#define VIRTIO_GPU_F_MULTI_PLANE 9
+
+/*
+ *VIRTIO_GPU_CMD_GET_PLANE_ROTATION
+ *VIRTIO_GPU_CMD_SET_ROTATION
+ */
+#define VIRTIO_GPU_F_ROTATION  10
+
 enum virtio_gpu_ctrl_type {
 	VIRTIO_GPU_UNDEFINED = 0,
 
@@ -95,6 +108,12 @@ enum virtio_gpu_ctrl_type {
 	VIRTIO_GPU_CMD_SET_SCANOUT_BLOB,
 	VIRTIO_GPU_CMD_SET_MODIFIER,
 	VIRTIO_GPU_CMD_SET_SCALING,
+	VIRTIO_GPU_CMD_FLUSH_SPRITE,
+	VIRTIO_GPU_CMD_FLUSH_SYNC,
+	VIRTIO_GPU_CMD_GET_PLANES,
+	VIRTIO_GPU_CMD_GET_PLANE_ROTATION,
+	VIRTIO_GPU_CMD_SET_ROTATION,
+	VIRTIO_GPU_CMD_SET_SPRITE_SCALING,
 
 	/* 3d commands */
 	VIRTIO_GPU_CMD_CTX_CREATE = 0x0200,
@@ -207,6 +226,14 @@ struct virtio_gpu_set_scanout {
 	__le32 resource_id;
 };
 
+/* VIRTIO_GPU_CMD_FLUSH_SYNC*/
+struct virtio_gpu_flush_sync{
+	struct virtio_gpu_ctrl_hdr hdr;
+	__le32 scanout_id;
+	__le32 padding;
+};
+
+
 /* VIRTIO_GPU_CMD_RESOURCE_FLUSH */
 struct virtio_gpu_resource_flush {
 	struct virtio_gpu_ctrl_hdr hdr;
@@ -215,12 +242,41 @@ struct virtio_gpu_resource_flush {
 	__le32 padding;
 };
 
+/* VIRTIO_GPU_CMD_FLUSH_SPRITE */
+struct virtio_gpu_flush_sprite {
+	struct virtio_gpu_ctrl_hdr hdr;
+	struct virtio_gpu_rect r;
+	__le32 scanout_id;
+	__le32 plane_id;
+	__le32 resource_id;
+	__le32 format;
+	__le32 width;
+	__le32 height;
+	__le64 modifier;
+	__le32 strides[4];
+	__le32 offsets[4];
+};
+/* VIRTIO_GPU_CMD_SET_ROTATION*/
+struct virtio_gpu_set_rotation{
+	struct virtio_gpu_ctrl_hdr hdr;
+	__le32 scanout_id;
+	__le32 plane_id;
+	__le64 rotation;
+};
 /* VIRTIO_GPU_CMD_SET_SCALING */
 struct virtio_gpu_set_scaling {
 	struct virtio_gpu_ctrl_hdr hdr;
 	struct virtio_gpu_rect dst;
 	__le32 scanout_id;
 	__le32 padding;
+};
+
+/* VIRTIO_GPU_CMD_SET_SPRITE_SCALING */
+struct virtio_gpu_set_sprite_scaling {
+	struct virtio_gpu_ctrl_hdr hdr;
+	struct virtio_gpu_rect dst;
+	__le32 scanout_id;
+	__le32 plane_id;
 };
 
 /* VIRTIO_GPU_CMD_TRANSFER_TO_HOST_2D: simple transfer to_host */
@@ -357,6 +413,34 @@ struct virtio_gpu_get_capset {
 struct virtio_gpu_resp_capset {
 	struct virtio_gpu_ctrl_hdr hdr;
 	__u8 capset_data[];
+};
+
+/*VIRTIO_GPU_CMD_GET_PLANE_ROTATION*/
+struct virtio_gpu_cmd_get_plane_rotation{
+	struct virtio_gpu_ctrl_hdr hdr;
+	__le32 scanout_id;
+	__le32 plane_id;
+};
+/* VIRTIO_GPU_RESP_OK_PLANE_ROTATION */
+struct virtio_gpu_resp_plane_rotation{
+	struct virtio_gpu_ctrl_hdr hdr;
+	__le32 count;
+	__le32 padding;
+	__le64 rotation[10];
+};
+
+/* VIRTIO_GPU_CMD_GET_PLANES*/
+struct virtio_gpu_cmd_get_planes{
+	struct virtio_gpu_ctrl_hdr hdr;
+	__le32 scanout;
+	__le32 padding;
+};
+/* VIRTIO_GPU_RESP_OK_PLANES*/
+struct virtio_gpu_resp_planes{
+	struct virtio_gpu_ctrl_hdr hdr;
+	__le32 plane_num;
+	__le32 size;
+	__le32 info[1024];
 };
 
 /* VIRTIO_GPU_CMD_GET_EDID */
