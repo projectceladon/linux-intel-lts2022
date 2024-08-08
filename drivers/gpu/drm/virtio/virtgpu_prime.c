@@ -143,12 +143,17 @@ struct dma_buf *virtgpu_gem_prime_export(struct drm_gem_object *obj,
 }
 
 struct drm_gem_object *virtgpu_gem_prime_import(struct drm_device *dev,
-						struct dma_buf *buf)
+						struct dma_buf *dma_buf)
 {
 	struct drm_gem_object *obj;
+	struct dma_buf_attachment *attach;
+	struct sg_table *sgt;
+	struct device *attach_dev = dev->dev;
+	struct virtio_gpu_device *vgdev = dev->dev_private;
+	int ret;
 
-	if (buf->ops == &virtgpu_dmabuf_ops.ops) {
-		obj = buf->priv;
+	if (dma_buf->ops == &virtgpu_dmabuf_ops.ops) {
+		obj = dma_buf->priv;
 		if (obj->dev == dev) {
 			/*
 			 * Importing dmabuf exported from our own gem increases
@@ -159,7 +164,39 @@ struct drm_gem_object *virtgpu_gem_prime_import(struct drm_device *dev,
 		}
 	}
 
-	return drm_gem_prime_import(dev, buf);
+	if (!dev->driver->gem_prime_import_sg_table)
+		return ERR_PTR(-EINVAL);
+	attach = ____dma_buf_dynamic_attach(dma_buf, attach_dev, NULL, NULL,
+					    vgdev->has_allow_p2p);
+	if (IS_ERR(attach))
+		return ERR_CAST(attach);
+
+	get_dma_buf(dma_buf);
+
+	sgt = dma_buf_map_attachment(attach, DMA_BIDIRECTIONAL);
+	if (IS_ERR(sgt)) {
+		ret = PTR_ERR(sgt);
+		goto fail_detach;
+	}
+
+	obj = dev->driver->gem_prime_import_sg_table(dev, attach, sgt);
+	if (IS_ERR(obj)) {
+		ret = PTR_ERR(obj);
+		goto fail_unmap;
+	}
+
+	obj->import_attach = attach;
+	obj->resv = dma_buf->resv;
+
+	return obj;
+
+fail_unmap:
+	dma_buf_unmap_attachment(attach, sgt, DMA_BIDIRECTIONAL);
+fail_detach:
+	dma_buf_detach(dma_buf, attach);
+	dma_buf_put(dma_buf);
+
+	return ERR_PTR(ret);
 }
 
 static int virtio_gpu_sgt_to_mem_entry(struct virtio_gpu_device *vgdev,
@@ -170,7 +207,16 @@ static int virtio_gpu_sgt_to_mem_entry(struct virtio_gpu_device *vgdev,
 	struct scatterlist *sg;
 	int si;
 
-	bool use_dma_api = !virtio_has_dma_quirk(vgdev->vdev);
+	/**
+	 * TODO: We must always use DMA addresses for the following two reasons:
+	 *
+	 * 1. By design we are not allowed to access the struct page backing a
+	 *    scatter list, especially when config DMABUF_DEBUG is turned on in
+	 *    which case the addresses will be mangled by the core.
+	 * 2. DMA addresses are required for dGPU local memory sharing between
+	 *    host and guest.
+	 */
+	const bool use_dma_api = true;
 	if (use_dma_api)
 		*nents = table->nents;
 	else
@@ -219,6 +265,8 @@ struct drm_gem_object *virtgpu_gem_prime_import_sg_table(
 		return ERR_PTR(-ENODEV);
 	}
 
+	drm_info(dev, "%s: table = %p, orig_nents = %u, nents = %u\n",
+		__func__, table, table->orig_nents, table->nents);
 	obj = drm_gem_shmem_prime_import_sg_table(dev, attach, table);
 	if (IS_ERR(obj)) {
 		return ERR_CAST(obj);
