@@ -90,7 +90,7 @@ struct ivshmem_private {
 static struct ivshmem_private g_ivshmem_dev;
 
 static struct pci_device_id ivshmem_id_table[] = {
-    { 0x1af4, 0x1110, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0},
+    { 0x1af4, 0x1110, 0x8086, 0x7465, 0, 0, 0},
     { 0 },
 };
 MODULE_DEVICE_TABLE(pci, ivshmem_id_table);
@@ -1299,7 +1299,8 @@ static int ivshmem_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	int ret;
 	int i;
 
-	pr_info("probing for ivshmem device: %s\n", pci_name(pdev));
+	pr_info("probing for ivshmem device: %s subid 0x%x vid 0x%x\n",
+			pci_name(pdev), id->subdevice, id->subvendor);
 
 	ret = pci_enable_device(pdev);
 	if (ret < 0) {
