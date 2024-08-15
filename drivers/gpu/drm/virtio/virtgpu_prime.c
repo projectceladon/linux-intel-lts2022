@@ -257,8 +257,10 @@ struct drm_gem_object *virtgpu_gem_prime_import_sg_table(
 	struct virtio_gpu_object_params params = { 0 };
 	struct virtio_gpu_object *bo;
 	struct drm_gem_object *obj;
+	struct drm_gem_object *i915_obj;
 	struct virtio_gpu_mem_entry *ents;
 	unsigned int nents;
+	struct dma_buf *dmabuf;
 	int ret;
 
 	if (!vgdev->has_resource_blob || vgdev->has_virgl_3d) {
@@ -282,13 +284,18 @@ struct drm_gem_object *virtgpu_gem_prime_import_sg_table(
 	if (ret != 0) {
 		goto err_put_id;
 	}
-
+	dmabuf = attach->dmabuf;
+	if (dmabuf && strcmp(module_name(dmabuf->owner), "i915") == 0) {
+			dmabuf = attach->dmabuf;
+			i915_obj = dmabuf->priv;
+			bo->protected = i915_obj->protected;
+	}
 	bo->guest_blob = true;
 	params.blob_mem = VIRTGPU_BLOB_MEM_GUEST;
 	params.blob_flags = VIRTGPU_BLOB_FLAG_USE_SHAREABLE;
 	params.blob = true;
 	params.size = size;
-
+	params.protected = bo->protected;
 	virtio_gpu_cmd_resource_create_blob(vgdev, bo, &params,
 					    ents, nents);
 	virtio_gpu_object_save_restore_list(vgdev, bo, &params);
