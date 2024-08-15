@@ -1552,6 +1552,7 @@ virtio_gpu_cmd_resource_create_blob(struct virtio_gpu_device *vgdev,
 	cmd_p->blob_id = cpu_to_le64(params->blob_id);
 	cmd_p->size = cpu_to_le64(params->size);
 	cmd_p->nr_entries = cpu_to_le32(nents);
+	cmd_p->protected = cpu_to_le64(params->protected);
 
 	vbuf->data_buf = ents;
 	vbuf->data_size = sizeof(*ents) * nents;
