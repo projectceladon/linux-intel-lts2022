@@ -23,6 +23,8 @@
 
 #include <asm/msr.h>
 
+#include "linux/virtio_shm.h"
+
 #define VQ_NAME_LEN	24
 /**
  * struct virtio_camera_ctrl_req - The internal data for one virtio-camera request and response
@@ -590,9 +592,18 @@ static int vcam_buf_init(struct vb2_buffer *vb)
 	if (!ents)
 		return -ENOMEM;
 
-	for_each_sg(sgt->sgl, sg, sgt->nents, i) {
-		ents[i].addr = cpu_to_le64(sg_phys(sg));
-		ents[i].length = cpu_to_le32(sg->length);
+	if (strcmp(vb->vb2_queue->dev->driver->name, "virtio-ivshmem") == 0 ||
+			strcmp(vb->vb2_queue->dev->driver->name, "virtio-guest-shm") == 0) {
+		pr_err("%s: sgl map addr by ivshmem\n",  __func__);
+		for_each_sg(sgt->sgl, sg, sgt->nents, i) {
+			ents[i].addr = virtio_shmem_page_to_dma_addr(vb->vb2_queue->dev, sg_page(sg));
+			ents[i].length = cpu_to_le32(sg->length);
+		}
+	} else {
+		for_each_sg(sgt->sgl, sg, sgt->nents, i) {
+			ents[i].addr = cpu_to_le64(sg_phys(sg));
+			ents[i].length = cpu_to_le32(sg->length);
+		}
 	}
 
 	vcam_req = virtio_camera_create_req(VIRTIO_CAMERA_CMD_CREATE_BUFFER);
@@ -634,8 +645,8 @@ static void vcam_buf_cleanup(struct vb2_buffer *vb)
 	memcpy(vcam_req->ctrl.u.buffer.uuid, vbuf->uuid, sizeof(vbuf->uuid));
 	err = vcam_vq_request(vnode, vcam_req, NULL, 0, false);
 	if (err) {
-	     pr_err("%s: Failed to deinit virtio-camera buffers, buffers may still be retained by backend\n",
-		     __func__);
+		pr_err("%s: Failed to deinit virtio-camera buffers, buffers may still be retained by backend\n",
+				__func__);
 	}
 	kfree(vcam_req);
 }
@@ -671,8 +682,8 @@ static void vcam_buf_queue(struct vb2_buffer *vb)
 	}
 
 	pr_debug("virtio-camera: qbuf, video idx is %d. UUID is %d, ptr is %pK\n",
-	vnode->idx, vcam_req->resp.u.buffer.uuid[0] + vcam_req->resp.u.buffer.uuid[1],
-	 vcam_req->vb);
+			vnode->idx, vcam_req->resp.u.buffer.uuid[0] + vcam_req->resp.u.buffer.uuid[1],
+			vcam_req->vb);
 	return;
 
 err_free:
