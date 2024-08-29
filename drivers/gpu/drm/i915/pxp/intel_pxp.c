@@ -718,8 +718,6 @@ intel_pxp_ioctl_io_message(struct intel_pxp *pxp, struct drm_file *drmfile,
 		goto end;
 	}
 
-	drm_info(&i915->drm, "Handled io message (%d)\n", ret);
-
 	if (copy_to_user(u64_to_user_ptr(params->msg_out), msg_out, params->msg_out_ret_size)) {
 		drm_err(&i915->drm, "Failed to set io message\n");
 		ret = -EFAULT;
