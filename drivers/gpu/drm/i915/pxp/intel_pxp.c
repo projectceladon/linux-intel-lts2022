@@ -3,6 +3,7 @@
  * Copyright(c) 2020 Intel Corporation.
  */
 #include <linux/workqueue.h>
+#include <linux/kernel.h>
 
 #include "gem/i915_gem_context.h"
 
@@ -719,6 +720,18 @@ intel_pxp_ioctl_io_message(struct intel_pxp *pxp, struct drm_file *drmfile,
 	}
 
 	drm_info(&i915->drm, "Handled io message (%d)\n", ret);
+	char *in = (char *) msg_in;
+	char *out = (char *)msg_out;
+	trace_printk("input buffer size:%d\n", params->msg_in_size);
+	for(int i = 0; i < params->msg_in_size;i++) {
+		trace_printk("%d", in[i]);
+	}
+	trace_printk("\n");
+	trace_printk("output buffer size:%d\n", params->msg_out_buf_size);
+	for(int i = 0; i < params->msg_out_buf_size;i++) {
+		trace_printk("%d", out[i]);
+	}
+	trace_printk("\n");
 
 	if (copy_to_user(u64_to_user_ptr(params->msg_out), msg_out, params->msg_out_ret_size)) {
 		drm_err(&i915->drm, "Failed to set io message\n");

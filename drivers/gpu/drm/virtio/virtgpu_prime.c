@@ -286,6 +286,7 @@ struct drm_gem_object *virtgpu_gem_prime_import_sg_table(
 	}
 	dmabuf = attach->dmabuf;
 	if (dmabuf && strcmp(module_name(dmabuf->owner), "i915") == 0) {
+			printk("virtio gpu get protected bo\n");
 			dmabuf = attach->dmabuf;
 			i915_obj = dmabuf->priv;
 			bo->protected = i915_obj->protected;
