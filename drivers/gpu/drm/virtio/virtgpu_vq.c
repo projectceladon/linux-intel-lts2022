@@ -83,6 +83,10 @@ void virtio_gpu_vblank_poll_arm(struct virtqueue *vq)
 	while((target < vgdev->num_vblankq) && (vgdev->vblank[target].vblank.vq != vq)) {
 		target++;
 	}
+	if (target >= vgdev->num_vblankq) {
+		DRM_WARN("virtio-gpu, received invalid vblank\n");
+		return;
+	}
 
 	spin_lock_irqsave(&vgdev->vblank[target].vblank.qlock, irqflags);
 	if((ret_value = virtqueue_get_buf(vq, &len)) != NULL) {
