@@ -244,7 +244,7 @@ probe_err:
 	return ret;
 }
 
-static int max96717f_dummy_remove(struct i2c_client *client)
+static void max96717f_dummy_remove(struct i2c_client *client)
 {
 	struct v4l2_subdev *sd = i2c_get_clientdata(client);
 	struct max96717f_dummy_priv *priv = to_max96717f_dummy(sd);
@@ -253,7 +253,7 @@ static int max96717f_dummy_remove(struct i2c_client *client)
 	v4l2_ctrl_handler_free(&priv->ctrls);
 	mutex_destroy(&priv->mutex);
 
-	return 0;
+	return;
 }
 
 

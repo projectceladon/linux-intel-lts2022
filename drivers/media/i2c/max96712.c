@@ -1168,7 +1168,7 @@ probe_err:
 	return ret;
 }
 
-static int max96712_remove(struct i2c_client *client)
+static void max96712_remove(struct i2c_client *client)
 {
 	struct v4l2_subdev *sd = i2c_get_clientdata(client);
 	struct max96712_priv *priv = to_max96712(sd);
@@ -1179,7 +1179,7 @@ static int max96712_remove(struct i2c_client *client)
 	media_entity_cleanup(&priv->sd.entity);
 	v4l2_device_unregister_subdev(sd);
 
-	return 0;
+	return;
 }
 
 /* no power or clk control */
