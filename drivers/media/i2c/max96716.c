@@ -26,7 +26,7 @@
 #include <media/v4l2-subdev.h>
 
 #include <media/max9671x.h>
-
+#include <linux/version.h>
 
 #define to_max96716(_sd) container_of(_sd, struct max96716_priv, sd)
 
@@ -868,9 +868,17 @@ failed_out:
 
 int max9671x_powerup(struct i2c_client *client)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
 #define PULLUP_PIN(client, pin) \
 	devm_gpio_request_one(&client->dev, pin, GPIOF_OUT_INIT_HIGH, NULL);\
 	devm_gpio_free(&client->dev, pin)
+#else
+#define PULLUP_PIN(client, pin) \
+	devm_gpio_request_one(&client->dev, pin, GPIOF_OUT_INIT_HIGH, NULL);\
+	gpio_free(pin);
+#endif
+
+
 
 	PULLUP_PIN(client, 658);
 	PULLUP_PIN(client, 648);
@@ -1127,7 +1135,7 @@ probe_err:
 	return ret;
 }
 
-static int max96716_remove(struct i2c_client *client)
+static void max96716_remove(struct i2c_client *client)
 {
 	struct v4l2_subdev *sd = i2c_get_clientdata(client);
 	struct max96716_priv *priv = to_max96716(sd);
@@ -1138,7 +1146,7 @@ static int max96716_remove(struct i2c_client *client)
 	media_entity_cleanup(&priv->sd.entity);
 	v4l2_device_unregister_subdev(sd);
 
-	return 0;
+	return;
 }
 
 /* no power or clk control */
