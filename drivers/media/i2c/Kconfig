@@ -1668,21 +1668,21 @@ config VIDEO_D4XX
 	  This is a Video4Linux2 sensor-level driver for intel realsence camera.
 
 config VIDEO_MAX96712
-    depends on I2C && VIDEO_V4L2
+    depends on I2C
     tristate "MAX96712 deserializer driver"
 	select MAX96717
     help
       This is a Video4Linux2 driver for MAX96712 deserializer.
 
 config VIDEO_MAX96716
-    depends on I2C && VIDEO_V4L2
+    depends on I2C
     tristate "MAX96716 deserializer driver"
 	select MAX96717
     help
       This is a Video4Linux2 driver for MAX96716 deserializer.
 
 config VIDEO_MAX96717
-    depends on I2C && VIDEO_V4L2
+    depends on I2C
     tristate "MAX96717 serializer driver"
     help
       This is a Video4Linux2 driver for MAX96717 serializer.
