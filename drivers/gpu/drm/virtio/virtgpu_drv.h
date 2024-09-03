@@ -31,6 +31,7 @@
 #include <linux/virtio_ids.h>
 #include <linux/virtio_config.h>
 #include <linux/virtio_gpu.h>
+#include <linux/backlight.h>
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_drv.h>
@@ -175,6 +176,7 @@ struct virtio_gpu_vbuffer {
 	struct list_head list;
 
 	uint32_t seqno;
+	struct completion notify;
 };
 
 #define VIRTIO_GPU_MAX_PLANES 6
@@ -232,12 +234,26 @@ struct virtio_gpu_vblank {
 	uint32_t buf[4];
 };
 
+#define MAX_BACKLIGHT_NUM  16
+struct virtio_gpu_backlight {
+	struct virtio_gpu_device *vgdev;
+	struct backlight_device *bd;
+	uint32_t backlight_id;
+	int32_t brightness;
+	int32_t max_brightness;
+	int32_t power;
+	enum backlight_type type;
+	enum backlight_scale scale;
+};
+
 struct virtio_gpu_device {
 	struct drm_device *ddev;
 
 	struct virtio_device *vdev;
 
 	struct virtio_gpu_output outputs[VIRTIO_GPU_MAX_SCANOUTS];
+	struct virtio_gpu_backlight backlight[MAX_BACKLIGHT_NUM];
+	uint32_t num_backlight;
 	uint32_t num_scanouts;
 	uint32_t num_vblankq;
 	struct virtio_gpu_queue ctrlq;
@@ -263,6 +279,7 @@ struct virtio_gpu_device {
 	bool has_modifier;
 	bool has_scaling;
 	bool has_vblank;
+	bool has_backlight;
 	bool has_allow_p2p;
 	bool has_multi_plane;
 	bool has_rotation;
@@ -489,6 +506,15 @@ void virtio_gpu_cmd_set_scaling(struct virtio_gpu_device *vgdev,
 
 void virtio_gpu_cmd_send_misc(struct virtio_gpu_device *vgdev, uint32_t scanout_id,
 		uint32_t plane_indx, struct virtio_gpu_cmd *cmdp, int cnt);
+
+int virtio_gpu_cmd_backlight_update_status(struct virtio_gpu_device *vgdev,
+                                    uint32_t backlight_id);
+
+int virtio_gpu_cmd_get_brightness(struct virtio_gpu_device *vgdev,
+                                    uint32_t backlight_id);
+
+int virtio_gpu_cmd_backlight_query(struct virtio_gpu_device *vgdev,
+                                    uint32_t backlight_id);
 
 /* virtgpu_display.c */
 int virtio_gpu_modeset_init(struct virtio_gpu_device *vgdev);
