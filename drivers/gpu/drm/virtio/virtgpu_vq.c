@@ -111,6 +111,7 @@ void virtio_gpu_vblank_ack(struct virtqueue *vq)
 
 		virtgpu_irqqueue_buf(vgdev->vblank[target].vblank.vq, ret_value);
 	}
+	virtqueue_kick(vq);
 
 	spin_unlock_irqrestore(&vgdev->vblank[target].vblank.qlock, irqflags);
 	drm_handle_vblank(dev, target);
