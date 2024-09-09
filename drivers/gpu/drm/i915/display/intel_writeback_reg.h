@@ -28,7 +28,7 @@
 #define STOP_TRIGGER_FRAME		(1 << 28)
 #define WD_CTL_POINTER_ETEH		(0 << 18)
 #define WD_CTL_POINTER_ETDH		(1 << 18)
-#define WD_CTL_POINTER_DTDH		(2 << 18)
+#define WD_CTL_POINTER_DTDH		(3 << 18)
 #define WD_INPUT_SELECT_MASK		(7 << 12)
 #define WD_INPUT_PIPE_A			(0 << 12)
 #define WD_INPUT_PIPE_B			(5 << 12)
@@ -92,8 +92,8 @@
 					_WD_IIR_0,\
 					_WD_IIR_1)
 
-#define _WD_FRAME_STATUS_0		0x6e56b
-#define _WD_FRAME_STATUS_1		0x6ed6b
+#define _WD_FRAME_STATUS_0		0x6e568
+#define _WD_FRAME_STATUS_1		0x6ed68
 #define WD_FRAME_STATUS(tc)		_MMIO_WD(tc,\
 					_WD_FRAME_STATUS_0,\
 					_WD_FRAME_STATUS_1)
@@ -125,4 +125,77 @@
 #define WD_TAIL_CFG(tc)			_MMIO_WD(tc,\
 					_WD_TAIL_CFG_0,\
 					_WD_TAIL_CFG_1)
+
+#define _WD_TAIL_CFG2_0			0x6e52c
+#define _WD_TAIL_CFG2_1			0x6ed2c
+#define WD_TAIL_CFG2(tc)			_MMIO_WD(tc,\
+					_WD_TAIL_CFG2_0,\
+					_WD_TAIL_CFG2_1)
+
+#define _WD_TAIL_CFG_0			0x6e520
+#define _WD_TAIL_CFG_1			0x6ed20
+#define WD_TAIL_CFG(tc)			_MMIO_WD(tc,\
+					_WD_TAIL_CFG_0,\
+					_WD_TAIL_CFG_1)
+
+#define _WD_TAIL_CFG_0			0x6e520
+#define _WD_TAIL_CFG_1			0x6ed20
+#define WD_TAIL_CFG(tc)			_MMIO_WD(tc,\
+					_WD_TAIL_CFG_0,\
+					_WD_TAIL_CFG_1)
+
+#define _WD_TAIL_CFG2_0			0x6e52c
+#define _WD_TAIL_CFG2_1			0x6ed2c
+#define WD_TAIL_CFG2(tc)			_MMIO_WD(tc,\
+					_WD_TAIL_CFG2_0,\
+					_WD_TAIL_CFG2_1)
+
+#define _WD_VFID_0			0x6e518
+#define _WD_VFID_1			0x6ed18
+#define WD_VFID(tc)			_MMIO_WD(tc,\
+					_WD_VFID_0,\
+					_WD_VFID_1)
+
+#define _WD_CHICKEN_0			0x6e574
+#define _WD_CHICKEN_1			0x6ed74
+#define WD_CHICKEN(tc)			_MMIO_WD(tc,\
+					_WD_CHICKEN_0,\
+					_WD_CHICKEN_1)
+
+#define _WD_DEBUG1_0			0x6e544
+#define _WD_DEBUG1_1			0x6ed44
+#define WD_DEBUG1(tc)			_MMIO_WD(tc,\
+					_WD_DEBUG1_0,\
+					_WD_DEBUG1_1)
+
+#define _WD_DEBUG2_0			0x6e548
+#define _WD_DEBUG2_1			0x6ed48
+#define WD_DEBUG2(tc)			_MMIO_WD(tc,\
+					_WD_DEBUG2_0,\
+					_WD_DEBUG2_1)
+
+#define _WD_PERF_CNT_0			0x6e55c
+#define _WD_PERF_CNT_1			0x6ed5c
+#define WD_PERF_CNT(tc)			_MMIO_WD(tc,\
+						_WD_PERF_CNT_0,\
+						_WD_PERF_CNT_1)
+
+#define _WD_TAIL_MSG_DBG_0			0x6e5c0
+#define _WD_TAIL_MSG_DBG_1			0x6edc0
+#define WD_TAIL_MSG_DBG(tc)			_MMIO_WD(tc,\
+						_WD_TAIL_MSG_DBG_0,\
+						_WD_TAIL_MSG_DBG_1)
+
+#define _WD_CTL_MSG_DBG_0			0x6e5cc
+#define _WD_CTL_MSG_DBG_1			0x6edcc
+#define WD_CTL_MSG_DBG(tc)			_MMIO_WD(tc,\
+						_WD_CTL_MSG_DBG_0,\
+						_WD_CTL_MSG_DBG_1)
+
+#define _WD_MSG_MASK_0			0x6e570
+#define _WD_MSG_MASK_1			0x6ed70
+#define WD_MSG_MASK(tc)			_MMIO_WD(tc,\
+						_WD_MSG_MASK_0,\
+						_WD_MSG_MASK_1)
+
 #endif /* _INTEL_WRITEBACK_REG_H_ */

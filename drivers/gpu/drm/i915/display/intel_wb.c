@@ -14,6 +14,9 @@
 #include "intel_de.h"
 #include "intel_writeback_reg.h"
 
+#define CSC_MAX_COEFF_REG_COUNT    6
+#define CSC_MAX_OFFSET_COUNT       3
+
 enum {
 	WD_CAPTURE_4_PIX,
 	WD_CAPTURE_2_PIX,
@@ -54,6 +57,9 @@ static int intel_wb_get_format(int pixel_format)
 {
 	int wb_format = -EINVAL;
 
+	DRM_INFO("Get format pixel format %x\n",
+		  pixel_format);
+
 	switch (pixel_format) {
 	case DRM_FORMAT_XBGR8888:
 	case DRM_FORMAT_XRGB8888:
@@ -70,6 +76,8 @@ static int intel_wb_get_format(int pixel_format)
 		DRM_ERROR("unsupported pixel format %x!\n",
 			  pixel_format);
 	}
+	DRM_INFO("Get format wb format %x\n",
+		  wb_format);
 
 	return wb_format;
 }
@@ -84,7 +92,7 @@ static int intel_wb_verify_pix_format(int format)
 		if (pix_format == wb_fmts[i])
 			return 0;
 
-	return true;
+	return -EINVAL;
 }
 
 static u32 intel_wb_get_stride(const struct intel_crtc_state *crtc_state,
@@ -133,20 +141,28 @@ static int intel_wb_pin_fb(struct intel_wb *intel_wb,
 
 static void intel_configure_slicing_strategy(struct drm_i915_private *i915,
 					     struct intel_wb *intel_wb,
-					     u32 *tmp)
+					     u32 tmp)
 {
-	*tmp &= ~WD_STRAT_MASK;
+	drm_dbg_kms(&i915->drm, "WD_STREAMCAP_CTL: 0x%8x\n", tmp);
+
+	tmp &= ~WD_STRAT_MASK;
+	drm_dbg_kms(&i915->drm, "WD_STREAMCAP_CTL: 0x%8x\n", tmp);
 	if (intel_wb->slicing_strategy == 1)
-		*tmp |= WD_SLICING_STRAT_1_1;
+		tmp |= WD_SLICING_STRAT_1_1;
 	else if (intel_wb->slicing_strategy == 2)
-		*tmp |= WD_SLICING_STRAT_2_1;
+		tmp |= WD_SLICING_STRAT_2_1;
 	else if (intel_wb->slicing_strategy == 3)
-		*tmp |= WD_SLICING_STRAT_4_1;
+		tmp |= WD_SLICING_STRAT_4_1;
 	else if (intel_wb->slicing_strategy == 4)
-		*tmp |= WD_SLICING_STRAT_8_1;
+		tmp |= WD_SLICING_STRAT_8_1;
+
+	drm_dbg_kms(&i915->drm, "Slicing_strategy WD_STREAMCAP_CTL(0x%05x): 0x%08x\n", WD_STREAMCAP_CTL(intel_wb->trans).reg, tmp);
 
 	intel_de_write(i915, WD_STREAMCAP_CTL(intel_wb->trans),
-		       *tmp);
+		       tmp);
+	drm_dbg_kms(&i915->drm, "WD Transocder: %05x, WD_STREAMCAP_CTL                    = %08x\n",
+		WD_STREAMCAP_CTL(intel_wb->trans).reg, intel_de_read(i915, WD_STREAMCAP_CTL(intel_wb->trans)));
+
 }
 
 static enum drm_mode_status
@@ -215,6 +231,7 @@ static bool intel_wb_get_hw_state(struct intel_encoder *encoder,
 	struct intel_crtc *wb_crtc = intel_wb->wb_crtc;
 	intel_wakeref_t wakeref;
 	u32 tmp;
+	drm_dbg_kms(&dev_priv->drm, "intel_wb_get_hw_state\n");
 
 	if (!wb_crtc)
 		return false;
@@ -228,12 +245,14 @@ static bool intel_wb_get_hw_state(struct intel_encoder *encoder,
 	tmp = intel_de_read(dev_priv, PIPECONF(intel_wb->trans));
 	ret = tmp & WD_TRANS_ACTIVE;
 	if (ret) {
+		drm_dbg_kms(&dev_priv->drm, "intel_wb_get_hw_state WD Transcode active\n");
 		*pipe = wb_crtc->pipe;
 		return true;
 	}
 
 out:
 	intel_display_power_put(dev_priv, encoder->power_domain, wakeref);
+	drm_dbg_kms(&dev_priv->drm, "intel_wb_get_hw_state WD Transcode active fail\n");
 	return false;
 }
 
@@ -363,6 +382,7 @@ void intel_wb_init(struct drm_i915_private *i915, enum transcoder trans)
 	intel_wb->trans = trans;
 	intel_wb->triggered_cap_mode = 1;
 	intel_wb->frame_num = 1;
+	intel_wb->stream_cap = true;
 	intel_wb->slicing_strategy = 1;
 	encoder->get_config = intel_wb_get_config;
 	encoder->compute_config = intel_wb_compute_config;
@@ -421,6 +441,64 @@ static void intel_wb_writeback_complete(struct intel_wb *intel_wb,
 	drm_writeback_signal_completion(wb_conn, status);
 }
 
+static void wd_dump_details(struct intel_crtc *intel_crtc, struct intel_wb *intel_wb)
+{
+	struct drm_i915_private *dev_priv = to_i915(intel_crtc->base.dev);
+	//int wd_pipe = intel_crtc->pipe;
+	//int i = 0;
+	drm_dbg_kms(&dev_priv->drm, "\nDumping WD Transcoder details\n");
+	drm_dbg_kms(&dev_priv->drm, "WD Transocder: %05x, WD_FUNC_CTL(TRANS_WD_FUNC_CTL_0)    = %08x\n",
+		 WD_TRANS_FUNC_CTL(intel_wb->trans).reg, intel_de_read(dev_priv, WD_TRANS_FUNC_CTL(intel_wb->trans)));
+	drm_dbg_kms(&dev_priv->drm, "WD Transocder: %05x, Stride(WD_STRIDE_0)                 = %08x\n",
+		 WD_STRIDE(intel_wb->trans).reg, intel_de_read(dev_priv, WD_STRIDE(intel_wb->trans)));
+	drm_dbg_kms(&dev_priv->drm, "WD Transocder: %05x, Surf(WD_SURF_0)                     = %08x\n",
+		 WD_SURF(intel_wb->trans).reg, intel_de_read(dev_priv, WD_SURF(intel_wb->trans)));
+	drm_dbg_kms(&dev_priv->drm, "WD Transocder: %05x, WD_TAIL_CFG                         = %08x\n",
+		WD_TAIL_CFG(intel_wb->trans).reg, intel_de_read(dev_priv, WD_TAIL_CFG(intel_wb->trans)));
+	drm_dbg_kms(&dev_priv->drm, "WD Transocder: %05x, WD_TAIL_CFG2                        = %08x\n",
+		WD_TAIL_CFG2(intel_wb->trans).reg, intel_de_read(dev_priv, WD_TAIL_CFG2(intel_wb->trans)));
+	drm_dbg_kms(&dev_priv->drm, "WD Transocder: %05x, IMR(WD_IMR_0)                       = %08x\n",
+		WD_IMR(intel_wb->trans).reg, intel_de_read(dev_priv, WD_IMR(intel_wb->trans)));
+	drm_dbg_kms(&dev_priv->drm, "WD Transocder: %05x, WD_IIR                              = %08x\n",
+		WD_IIR(intel_wb->trans).reg, intel_de_read(dev_priv, WD_IIR(intel_wb->trans)));
+	drm_dbg_kms(&dev_priv->drm, "WD Transocder: %05x, WD_FRAME_STATUS                     = %08x\n",
+		WD_FRAME_STATUS(intel_wb->trans).reg, intel_de_read(dev_priv, WD_FRAME_STATUS(intel_wb->trans)));
+	drm_dbg_kms(&dev_priv->drm, "WD Transocder: %05x, HTotal(TRANS_HTOTAL_WD0)            = %08x\n",
+		 HTOTAL(intel_wb->trans).reg, intel_de_read(dev_priv, HTOTAL(intel_wb->trans)));
+	drm_dbg_kms(&dev_priv->drm, "WD Transocder: %05x, VTotal(TRANS_VTOTAL_WD0)            = %08x\n",
+		 VTOTAL(intel_wb->trans).reg, intel_de_read(dev_priv, VTOTAL(intel_wb->trans)));
+	drm_dbg_kms(&dev_priv->drm, "WD Transcoder: %05x, Trans_Conf(TRANS_CONF_WD0)          = %08x\n",
+		 PIPECONF(intel_wb->trans).reg, intel_de_read(dev_priv, PIPECONF(intel_wb->trans)));
+	drm_dbg_kms(&dev_priv->drm, "WD Transocder: %05x, WD_27_M_0                           = %08x\n",
+		WD_27_M(intel_wb->trans).reg, intel_de_read(dev_priv, WD_27_M(intel_wb->trans)));
+	drm_dbg_kms(&dev_priv->drm, "WD Transocder: %05x, WD_27_N_0                           = %08x\n",
+		WD_27_N(intel_wb->trans).reg, intel_de_read(dev_priv, WD_27_N(intel_wb->trans)));
+	drm_dbg_kms(&dev_priv->drm, "WD Transocder: %05x, WD_STREAMCAP_CTL                    = %08x\n",
+		WD_STREAMCAP_CTL(intel_wb->trans).reg, intel_de_read(dev_priv, WD_STREAMCAP_CTL(intel_wb->trans)));
+	drm_dbg_kms(&dev_priv->drm, "WD Transocder: %05x, WD_VFID                             = %08x\n",
+		 WD_VFID(intel_wb->trans).reg, intel_de_read(dev_priv, WD_VFID(intel_wb->trans)));
+	drm_dbg_kms(&dev_priv->drm, "WD Transocder: %05x, WD_CHICKEN                          = %08x\n",
+		WD_CHICKEN(intel_wb->trans).reg, intel_de_read(dev_priv, WD_CHICKEN(intel_wb->trans)));
+	drm_dbg_kms(&dev_priv->drm, "WD Transocder: %05x, DEBUG_1                             = %08x\n",
+		WD_DEBUG1(intel_wb->trans).reg, intel_de_read(dev_priv, WD_DEBUG1(intel_wb->trans)));
+	drm_dbg_kms(&dev_priv->drm, "WD Transocder: %05x, DEBUG_2                             = %08x\n",
+		WD_DEBUG2(intel_wb->trans).reg, intel_de_read(dev_priv, WD_DEBUG2(intel_wb->trans)));
+	drm_dbg_kms(&dev_priv->drm, "WD Transocder: %05x, WD_PERF_CNT                         = %08x\n",
+		WD_PERF_CNT(intel_wb->trans).reg, intel_de_read(dev_priv, WD_PERF_CNT(intel_wb->trans)));
+	drm_dbg_kms(&dev_priv->drm, "WD Transocder: %05x, WD_TAIL_MSG_DBG                     = %08x\n",
+		 WD_TAIL_MSG_DBG(intel_wb->trans).reg, intel_de_read(dev_priv, WD_TAIL_MSG_DBG(intel_wb->trans)));
+	drm_dbg_kms(&dev_priv->drm, "WD Transocder: %05x, Notific(WD_MSG_MASK_0)              = %08x\n",
+		 WD_MSG_MASK(intel_wb->trans).reg, intel_de_read(dev_priv, WD_MSG_MASK(intel_wb->trans)));
+
+	drm_dbg_kms(&dev_priv->drm, "WD Transocder: %05x, WD_CTL_MSG_DBG                      = %08x\n",
+		WD_CTL_MSG_DBG(intel_wb->trans).reg, intel_de_read(dev_priv, WD_CTL_MSG_DBG(intel_wb->trans)));
+
+}
+
+#if WB_DUMP_DEBUG
+static int wd_dump_first_time = 1;
+#endif
+
 static int intel_wb_setup_transcoder(struct intel_wb *intel_wb,
 				     struct intel_crtc_state *pipe_config,
 				     struct drm_connector_state *conn_state,
@@ -434,6 +512,8 @@ static int intel_wb_setup_transcoder(struct intel_wb *intel_wb,
 	int ret;
 	u32 stride, tmp;
 	u16 hactive, vactive;
+	drm_dbg_kms(&dev_priv->drm,
+			"intel_wb_setup_transcoder start\n");
 
 	fb = job->fb;
 	wb_fb_obj = fb->obj[0];
@@ -441,7 +521,15 @@ static int intel_wb_setup_transcoder(struct intel_wb *intel_wb,
 		drm_dbg_kms(&dev_priv->drm, "No framebuffer gem object created\n");
 		return -EINVAL;
 	}
-
+#if WB_DUMP_DEBUG
+	if(wd_dump_first_time)
+	{
+		drm_dbg_kms(&dev_priv->drm, "wd_go FIRST TIME!!!!!!!!!!!!!!!!!!!!!------------------------->>>>>>>>>>>>> \n");
+		wd_dump_details(intel_crtc, intel_wb);
+		drm_dbg_kms(&dev_priv->drm, "wd_go AFTER FIRST TIME!!!!!!!!!!!!!!!-------------------------<<<<<<<<<<<<< \n");
+		wd_dump_first_time = 0;
+	}
+#endif
 	ret = intel_wb_pin_fb(intel_wb, fb);
 	drm_WARN_ON(&dev_priv->drm, ret != 0);
 	/* Write stride and surface registers in that particular order */
@@ -450,32 +538,45 @@ static int intel_wb_setup_transcoder(struct intel_wb *intel_wb,
 	tmp = intel_de_read(dev_priv, WD_STRIDE(intel_wb->trans));
 	tmp &= ~WD_STRIDE_MASK;
 	tmp |= (stride << WD_STRIDE_SHIFT);
+	drm_dbg_kms(&dev_priv->drm, "WD_STRIDE: 0x%05x, tmp: 0x%08x\n", WD_STRIDE(intel_wb->trans).reg, tmp);
 
 	intel_de_write(dev_priv, WD_STRIDE(intel_wb->trans), tmp);
 
 	tmp = intel_de_read(dev_priv, WD_SURF(intel_wb->trans));
+	drm_dbg_kms(&dev_priv->drm, "WD_SURF: 0x%05x, tmp: 0x%08x\n", WD_SURF(intel_wb->trans).reg, tmp);
 
 	intel_de_write(dev_priv, WD_SURF(intel_wb->trans),
 		       i915_ggtt_offset(intel_wb->vma));
+	drm_dbg_kms(&dev_priv->drm, "WD_SURF: 0x%05x, i915_ggtt_offset: 0x%08x\n", WD_SURF(intel_wb->trans).reg, i915_ggtt_offset(intel_wb->vma));
 
 	tmp = intel_de_read_fw(dev_priv, WD_IIR(intel_wb->trans));
+	drm_dbg_kms(&dev_priv->drm, "WD_IIR: 0x%05x, tmp: 0x%08x\n", WD_IIR(intel_wb->trans).reg, tmp);
+
 	intel_de_write_fw(dev_priv, WD_IIR(intel_wb->trans), tmp);
 
 	tmp = ~(WD_GTT_FAULT_INT | WD_WRITE_COMPLETE_INT | WD_FRAME_COMPLETE_INT |
 		WD_VBLANK_INT | WD_OVERRUN_INT | WD_CAPTURING_INT);
+	drm_dbg_kms(&dev_priv->drm, "WD_IMR: 0x%05x, tmp: 0x08%x\n", WD_IMR(intel_wb->trans).reg, tmp);
+
 	intel_de_write_fw(dev_priv, WD_IMR(intel_wb->trans), tmp);
 
 	if (intel_wb->stream_cap) {
 		tmp = intel_de_read(dev_priv,
 				    WD_STREAMCAP_CTL(intel_wb->trans));
 		tmp |= WD_STREAM_CAP_MODE_EN;
-		intel_configure_slicing_strategy(dev_priv, intel_wb, &tmp);
+		drm_dbg_kms(&dev_priv->drm, "WD_STREAMCAP_CTL: 0x%8x\n", tmp);
+		intel_configure_slicing_strategy(dev_priv, intel_wb, tmp);
 	}
 
 	hactive = pipe_config->uapi.mode.hdisplay;
 	vactive = pipe_config->uapi.mode.vdisplay;
 	tmp = intel_de_read(dev_priv, HTOTAL(intel_wb->trans));
+	drm_dbg_kms(&dev_priv->drm, "HTOTAL: 0x%05x, tmp: 0x%08x\n", HTOTAL(intel_wb->trans).reg, tmp);
+	drm_dbg_kms(&dev_priv->drm, "hactive: 0x%08x\n", hactive);
+
 	tmp = intel_de_read(dev_priv, VTOTAL(intel_wb->trans));
+	drm_dbg_kms(&dev_priv->drm, "VTOTAL: 0x%05x, tmp: 0x%08x\n", VTOTAL(intel_wb->trans).reg, tmp);
+	drm_dbg_kms(&dev_priv->drm, "vactive: 0x%08x\n", vactive);
 
 	/* minimum hactive as per bspec: 64 pixels */
 	if (hactive < 64)
@@ -523,6 +624,7 @@ static int intel_wb_setup_transcoder(struct intel_wb *intel_wb,
 
 	/* select input pipe */
 	tmp &= ~WD_INPUT_SELECT_MASK;
+	pipe = PIPE_A;
 	switch (pipe) {
 	default:
 		fallthrough;
@@ -543,20 +645,30 @@ static int intel_wb_setup_transcoder(struct intel_wb *intel_wb,
 	/* enable DDI buffer */
 	if (!(tmp & TRANS_WD_FUNC_ENABLE))
 		tmp |= TRANS_WD_FUNC_ENABLE;
+	drm_dbg_kms(&dev_priv->drm, "WD_TRANS_FUNC_CTL: 0x%05x, tmp: 0x%08x\n", WD_TRANS_FUNC_CTL(intel_wb->trans).reg, tmp);
 
 	intel_de_write(dev_priv, WD_TRANS_FUNC_CTL(intel_wb->trans), tmp);
 
+#if WB_DUMP_DEBUG
+	drm_dbg_kms(&dev_priv->drm, "wd_go5-A1 - Reg Dump Before Enable\n");
+	drm_dbg_kms(&dev_priv->drm, "wd_go5-A2 ------------------------------------------------------------\n");
+	wd_dump_details(intel_crtc, intel_wb);
+	drm_dbg_kms(&dev_priv->drm, "wd_go5-A3 ------------------------------------------------------------\n");
+#endif
 	tmp = intel_de_read(dev_priv, PIPECONF(intel_wb->trans));
+	drm_dbg_kms(&dev_priv->drm, "PIPECONF: 0x%05x\n", PIPECONF(intel_wb->trans).reg);
 	ret = tmp & WD_TRANS_ACTIVE;
 	if (!ret) {
 		/* enable the transcoder */
 		tmp = intel_de_read(dev_priv, PIPECONF(intel_wb->trans));
 		tmp |= WD_TRANS_ENABLE;
+		drm_dbg_kms(&dev_priv->drm, "PIPECONF: 0x%08x\n", tmp);
+
 		intel_de_write(dev_priv, PIPECONF(intel_wb->trans), tmp);
 
 		/* wait for transcoder to be enabled */
 		if (intel_de_wait_for_set(dev_priv, PIPECONF(intel_wb->trans),
-					  WD_TRANS_ACTIVE, 10))
+					  WD_TRANS_ACTIVE, 100))
 			drm_err(&dev_priv->drm, "WD transcoder could not be enabled\n");
 	}
 
@@ -573,6 +685,8 @@ static int intel_wb_capture(struct intel_wb *intel_wb,
 	int ret = 0, status = 0;
 	struct intel_crtc *wb_crtc = intel_wb->wb_crtc;
 	unsigned long flags;
+	drm_dbg_kms(&i915->drm,
+			"intel_wb_capture start\n");
 
 	if (!job->out_fence)
 		drm_dbg_kms(&i915->drm, "Not able to get out_fence for job\n");
@@ -595,6 +709,7 @@ static int intel_wb_capture(struct intel_wb *intel_wb,
 	tmp |= START_TRIGGER_FRAME;
 	tmp &= ~WD_FRAME_NUMBER_MASK;
 	tmp |= intel_wb->frame_num;
+	drm_dbg_kms(&i915->drm, "Capture WD_TRANS_FUNC_CTL: 0x%8x, tmp: 0x%8x\n", WD_TRANS_FUNC_CTL(intel_wb->trans).reg, tmp);
 	intel_de_write_fw(i915,	WD_TRANS_FUNC_CTL(intel_wb->trans), tmp);
 
 	if (!intel_de_wait_for_set(i915, WD_IIR(intel_wb->trans),
@@ -619,7 +734,7 @@ static int intel_wb_capture(struct intel_wb *intel_wb,
 		wb_crtc->wb.e = NULL;
 	} else {
 		drm_err(&i915->drm, "Event NULL! %p, %p\n", &i915->drm,
-			wb_crtc);
+		wb_crtc);
 	}
 	if (!intel_get_writeback_job_from_queue(intel_wb))
 		intel_wb_disable_capture(intel_wb);

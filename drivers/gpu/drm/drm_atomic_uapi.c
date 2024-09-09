@@ -805,6 +805,7 @@ static int drm_atomic_connector_set_property(struct drm_connector *connector,
 	} else if (property == config->writeback_fb_id_property) {
 		struct drm_framebuffer *fb;
 		int ret;
+		drm_dbg_kms(dev, "writeback_fb_id_property, val %d\n", val);
 
 		fb = drm_framebuffer_lookup(dev, file_priv, val);
 		ret = drm_atomic_set_writeback_fb_for_connector(state, fb);
@@ -813,6 +814,7 @@ static int drm_atomic_connector_set_property(struct drm_connector *connector,
 		return ret;
 	} else if (property == config->writeback_out_fence_ptr_property) {
 		s32 __user *fence_ptr = u64_to_user_ptr(val);
+		drm_dbg_kms(dev, "writeback_out_fence_ptr_property\n");
 
 		return set_out_fence_for_connector(state->state, connector,
 						   fence_ptr);

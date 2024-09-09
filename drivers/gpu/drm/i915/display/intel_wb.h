@@ -11,6 +11,7 @@
 #include "intel_display_types.h"
 
 #define I915_MAX_WD_TANSCODERS 2
+#define WB_DUMP_DEBUG          0
 
 struct intel_wb {
 	struct intel_encoder base;
