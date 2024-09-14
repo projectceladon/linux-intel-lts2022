@@ -10,6 +10,7 @@
 #include "intel_pxp_pm.h"
 #include "intel_pxp_session.h"
 #include "intel_pxp_types.h"
+#include "virt/intel_pxp_fe.h"
 
 void intel_pxp_suspend_prepare(struct intel_pxp *pxp)
 {
@@ -24,6 +25,8 @@ void intel_pxp_suspend_prepare(struct intel_pxp *pxp)
 void intel_pxp_suspend(struct intel_pxp *pxp)
 {
 	intel_wakeref_t wakeref;
+	if (intel_pxp_is_in_vf(pxp))
+		return intel_pxp_fe_suspend(pxp);
 
 	if (!intel_pxp_is_enabled(pxp))
 		return;
@@ -34,8 +37,10 @@ void intel_pxp_suspend(struct intel_pxp *pxp)
 	}
 }
 
-void intel_pxp_resume_complete(struct intel_pxp *pxp)
+static void _pxp_resume(struct intel_pxp *pxp, bool take_wakeref)
 {
+	intel_wakeref_t wakeref;
+
 	if (!intel_pxp_is_enabled(pxp))
 		return;
 
@@ -48,11 +53,31 @@ void intel_pxp_resume_complete(struct intel_pxp *pxp)
 	if (!HAS_ENGINE(pxp->ctrl_gt, GSC0) && !pxp->pxp_component)
 		return;
 
+	if (take_wakeref)
+		wakeref = intel_runtime_pm_get(&pxp->ctrl_gt->i915->runtime_pm);
 	intel_pxp_init_hw(pxp);
+	if (take_wakeref)
+		intel_runtime_pm_put(&pxp->ctrl_gt->i915->runtime_pm, wakeref);
+}
+
+void intel_pxp_resume_complete(struct intel_pxp *pxp)
+{
+	if (intel_pxp_is_in_vf(pxp))
+		return intel_pxp_fe_resume_complete(pxp);
+	_pxp_resume(pxp, true);
+}
+
+void intel_pxp_runtime_resume(struct intel_pxp *pxp)
+{
+	if (intel_pxp_is_in_vf(pxp))
+		return intel_pxp_fe_runtime_resume(pxp);
+	_pxp_resume(pxp, false);
 }
 
 void intel_pxp_runtime_suspend(struct intel_pxp *pxp)
 {
+	if (intel_pxp_is_in_vf(pxp))
+		return intel_pxp_fe_runtime_suspend(pxp);
 	if (!intel_pxp_is_enabled(pxp))
 		return;
 

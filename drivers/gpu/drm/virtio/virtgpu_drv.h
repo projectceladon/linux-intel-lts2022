@@ -31,6 +31,7 @@
 #include <linux/virtio_ids.h>
 #include <linux/virtio_config.h>
 #include <linux/virtio_gpu.h>
+#include <linux/backlight.h>
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_drv.h>
@@ -84,6 +85,7 @@ struct virtio_gpu_object_params {
 	uint32_t blob_mem;
 	uint32_t blob_flags;
 	uint64_t blob_id;
+	bool protected;
 };
 
 struct virtio_gpu_object {
@@ -96,6 +98,7 @@ struct virtio_gpu_object {
 
 	int uuid_state;
 	uuid_t uuid;
+	bool protected;
 };
 #define gem_to_virtio_gpu_obj(gobj) \
 	container_of((gobj), struct virtio_gpu_object, base.base)
@@ -175,6 +178,18 @@ struct virtio_gpu_vbuffer {
 	struct list_head list;
 
 	uint32_t seqno;
+	struct completion notify;
+};
+
+struct virtio_gpu_hdcp {
+	struct work_struct prop_work;
+	struct mutex mutex;
+	struct virtio_gpu_output *output;
+	u32 value;
+	u32 type;
+	int hdcp2;
+	int connector_hdcp2;
+	bool query_done;
 };
 
 #define VIRTIO_GPU_MAX_PLANES 6
@@ -194,6 +209,7 @@ struct virtio_gpu_output {
 	int plane_num;
 	uint64_t rotation[VIRTIO_GPU_MAX_PLANES];
 	unsigned scaler_users;
+	struct virtio_gpu_hdcp hdcp;
 };
 #define drm_crtc_to_virtio_gpu_output(x) \
 	container_of(x, struct virtio_gpu_output, crtc)
@@ -232,16 +248,32 @@ struct virtio_gpu_vblank {
 	uint32_t buf[4];
 };
 
+#define MAX_BACKLIGHT_NUM  16
+struct virtio_gpu_backlight {
+	struct virtio_gpu_device *vgdev;
+	struct backlight_device *bd;
+	uint32_t backlight_id;
+	int32_t brightness;
+	int32_t max_brightness;
+	int32_t power;
+	enum backlight_type type;
+	enum backlight_scale scale;
+};
+
 struct virtio_gpu_device {
 	struct drm_device *ddev;
 
 	struct virtio_device *vdev;
 
 	struct virtio_gpu_output outputs[VIRTIO_GPU_MAX_SCANOUTS];
+	struct virtio_gpu_backlight backlight[MAX_BACKLIGHT_NUM];
+	uint32_t num_backlight;
 	uint32_t num_scanouts;
 	uint32_t num_vblankq;
 	struct virtio_gpu_queue ctrlq;
 	struct virtio_gpu_queue cursorq;
+	struct virtio_gpu_queue hdcpq;
+	struct virtio_gpu_cp_notification hdcp_buf;
 
 	struct kmem_cache *vbufs;
 
@@ -263,11 +295,13 @@ struct virtio_gpu_device {
 	bool has_modifier;
 	bool has_scaling;
 	bool has_vblank;
+	bool has_backlight;
 	bool has_allow_p2p;
 	bool has_multi_plane;
 	bool has_rotation;
 	bool has_pixel_blend_mode;
 	bool has_multi_planar;
+	bool has_hdcp;
 	bool has_indirect;
 	bool has_resource_assign_uuid;
 	bool has_resource_blob;
@@ -440,13 +474,16 @@ virtio_gpu_cmd_resource_create_3d(struct virtio_gpu_device *vgdev,
 void virtio_gpu_ctrl_ack(struct virtqueue *vq);
 void virtio_gpu_cursor_ack(struct virtqueue *vq);
 void virtio_gpu_vblank_ack(struct virtqueue *vq);
+void virtio_gpu_hdcp_ack(struct virtqueue *vq);
 void virtio_gpu_vblank_poll_arm(struct virtqueue *vq);
 void virtio_gpu_fence_ack(struct virtqueue *vq);
 void virtio_gpu_dequeue_ctrl_func(struct work_struct *work);
 void virtio_gpu_dequeue_cursor_func(struct work_struct *work);
+void virtio_gpu_dequeue_hdcp_func(struct work_struct *work);
 void virtio_gpu_dequeue_fence_func(struct work_struct *work);
 void virtio_gpu_notify(struct virtio_gpu_device *vgdev);
 void virtio_gpu_vblankq_notify(struct virtio_gpu_device *vgdev);
+void virtio_gpu_hdcp_notify(struct virtio_gpu_device *vgdev);
 int
 virtio_gpu_cmd_resource_assign_uuid(struct virtio_gpu_device *vgdev,
 				    struct virtio_gpu_object_array *objs);
@@ -488,6 +525,22 @@ void virtio_gpu_cmd_set_scaling(struct virtio_gpu_device *vgdev,
 
 void virtio_gpu_cmd_send_misc(struct virtio_gpu_device *vgdev, uint32_t scanout_id,
 		uint32_t plane_indx, struct virtio_gpu_cmd *cmdp, int cnt);
+
+int virtio_gpu_cmd_backlight_update_status(struct virtio_gpu_device *vgdev,
+                                    uint32_t backlight_id);
+
+int virtio_gpu_cmd_get_brightness(struct virtio_gpu_device *vgdev,
+                                    uint32_t backlight_id);
+
+int virtio_gpu_cmd_backlight_query(struct virtio_gpu_device *vgdev,
+                                    uint32_t backlight_id);
+
+int virtio_gpu_cmd_cp_set(struct virtio_gpu_device *vgdev,
+                                    uint32_t scanout_id,
+                                    uint32_t type, uint32_t cp);
+
+int virtio_gpu_cmd_cp_query(struct virtio_gpu_device *vgdev,
+                                    uint32_t scanout_id);
 
 /* virtgpu_display.c */
 int virtio_gpu_modeset_init(struct virtio_gpu_device *vgdev);
@@ -547,6 +600,7 @@ struct drm_gem_object *virtgpu_gem_prime_import_sg_table(
 
 /* virtgpu_debugfs.c */
 void virtio_gpu_debugfs_init(struct drm_minor *minor);
+void virtio_gpu_debugfs_late_init(struct virtio_gpu_device *vgpudev);
 
 /* virtgpu_vram.c */
 bool virtio_gpu_is_vram(struct virtio_gpu_object *bo);

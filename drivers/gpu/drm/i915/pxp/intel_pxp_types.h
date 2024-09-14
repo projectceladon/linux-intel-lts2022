@@ -10,6 +10,7 @@
 #include <linux/mutex.h>
 #include <linux/types.h>
 #include <linux/workqueue.h>
+#include "virt/virtpxp_drv.h"
 
 struct drm_i915_private;
 
@@ -42,6 +43,23 @@ struct intel_pxp_session {
 	u32 tag;
 };
 
+struct intel_pxp_fe {
+	struct drm_i915_private *i915;
+	bool enabled;
+	bool active;
+	struct mutex session_mutex;
+	int device_idx;
+	int device_vfid;
+	int max_sessions;
+	int avail_sessions;
+	struct virtio_pxp *vpxp;
+	spinlock_t irq_lock;
+	struct intel_pxp_session hwdrm_sessions[INTEL_PXP_MAX_HWDRM_SESSIONS];
+	u32 key_instance;
+	struct work_struct session_work;
+	u32 session_events;
+};
+
 /**
  * struct intel_pxp - pxp state
  */
@@ -51,6 +69,15 @@ struct intel_pxp {
 	 * the VDBOX, the KCR engine (and GSC CS depending on the platform)
 	 */
 	struct intel_gt *ctrl_gt;
+
+	/**
+	 * @platform_cfg_is_bad: used to track if any prior arb session creation resulted
+	 * in a failure that was caused by a platform configuration issue, meaning that
+	 * failure will not get resolved without a change to the platform (not kernel)
+	 * such as BIOS configuration, firwmware update, etc. This bool gets reflected when
+	 * GET_PARAM:I915_PARAM_PXP_STATUS is called.
+	 */
+	bool platform_cfg_is_bad;
 
 	/**
 	 * @kcr_base: base mmio offset for the KCR engine which is different on legacy platforms
@@ -64,6 +91,7 @@ struct intel_pxp {
 	struct gsccs_session_resources {
 		u64 host_session_handle; /* used by firmware to link commands to sessions */
 		struct intel_context *ce; /* context for gsc command submission */
+		struct i915_address_space *vm; /* only for user space session contexts */
 
 		struct i915_vma *pkt_vma; /* GSC FW cmd packet vma */
 		void *pkt_vaddr;  /* GSC FW cmd packet virt pointer */
@@ -71,6 +99,8 @@ struct intel_pxp {
 		struct i915_vma *bb_vma; /* HECI_PKT batch buffer vma */
 		void *bb_vaddr; /* HECI_PKT batch buffer virt pointer */
 	} gsccs_res;
+	/** @gsccs_clients: list of gsccs_res structs for each active client. */
+	struct list_head gsccs_clients; /* protected by session_mutex */
 
 	/**
 	 * @pxp_component: i915_pxp_component struct of the bound mei_pxp
@@ -83,6 +113,13 @@ struct intel_pxp {
 	 * @dev_link: Enforce module relationship for power management ordering.
 	 */
 	struct device_link *dev_link;
+	/**
+	 * @mei_pxp_last_msg_interrupted: To catch and drop stale responses
+	 * from previuosly interrupted send-msg to mei before issuing new
+	 * send-recv.
+	 */
+	bool mei_pxp_last_msg_interrupted;
+
 	/**
 	 * @pxp_component_added: track if the pxp component has been added.
 	 * Set and cleared in tee init and fini functions respectively.
@@ -129,9 +166,13 @@ struct intel_pxp {
 
 	/** @session_mutex: protects hwdrm_sesions, and reserved_sessions. */
 	struct mutex session_mutex;
+	/** @reserved_sessions: bitmap of hw session slots for used-vs-free book-keeping. */
 	DECLARE_BITMAP(reserved_sessions, INTEL_PXP_MAX_HWDRM_SESSIONS);
+	/** @hwdrm_sessions: array of intel_pxp_sesion ptrs mapped to reserved_sessions bitmap. */
 	struct intel_pxp_session *hwdrm_sessions[INTEL_PXP_MAX_HWDRM_SESSIONS];
+	/** @arb_session: the default intel_pxp_session. */
 	struct intel_pxp_session arb_session;
+	/** @next_tag_id: looping counter (per session) to track teardown-creation events. */
 	u8 next_tag_id[INTEL_PXP_MAX_HWDRM_SESSIONS];
 
 	/** @session_work: worker that manages session events. */
@@ -141,6 +182,9 @@ struct intel_pxp {
 #define PXP_TERMINATION_REQUEST  BIT(0)
 #define PXP_TERMINATION_COMPLETE BIT(1)
 #define PXP_INVAL_REQUIRED       BIT(2)
+#define PXP_EVENT_TYPE_IRQ       BIT(3)
+	bool vf;
+	struct intel_pxp_fe fe;
 };
 
 #endif /* __INTEL_PXP_TYPES_H__ */
