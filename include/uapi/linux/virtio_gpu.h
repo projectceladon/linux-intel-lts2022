@@ -75,6 +75,8 @@
 
 #define VIRTIO_GPU_F_VBLANK              7
 
+#define VIRTIO_GPU_F_BACKLIGHT           8
+
 #define VIRTIO_GPU_F_ALLOW_P2P           31
 
 /*
@@ -141,6 +143,11 @@ enum virtio_gpu_ctrl_type {
 	VIRTIO_GPU_CMD_UPDATE_CURSOR = 0x0300,
 	VIRTIO_GPU_CMD_MOVE_CURSOR,
 
+	/* backlight cmd */
+	VIRTIO_GPU_CMD_BACKLIGHT_UPDATE_STATUS = 0x0400,
+	VIRTIO_GPU_CMD_BACKLIGHT_GET,
+	VIRTIO_GPU_CMD_BACKLIGHT_QUERY,
+
 	/* success responses */
 	VIRTIO_GPU_RESP_OK_NODATA = 0x1100,
 	VIRTIO_GPU_RESP_OK_DISPLAY_INFO,
@@ -149,6 +156,8 @@ enum virtio_gpu_ctrl_type {
 	VIRTIO_GPU_RESP_OK_EDID,
 	VIRTIO_GPU_RESP_OK_RESOURCE_UUID,
 	VIRTIO_GPU_RESP_OK_MAP_INFO,
+	VIRTIO_GPU_RESP_OK_BACKLIGHT_GET,
+	VIRTIO_GPU_RESP_OK_BACKLIGHT,
 
 	/* error responses */
 	VIRTIO_GPU_RESP_ERR_UNSPEC = 0x1200,
@@ -297,6 +306,45 @@ struct virtio_gpu_set_scaling {
 	struct virtio_gpu_ctrl_hdr hdr;
 	struct virtio_gpu_rect dst;
 	__le32 scanout_id;
+	__le32 padding;
+};
+
+/* VIRTIO_GPU_CMD_BACKLIGHT_UPDATE_STATUS */
+struct virtio_gpu_backlight_update_status {
+	struct virtio_gpu_ctrl_hdr hdr;
+	__le32 backlight_id;
+	__le32 brightness;
+	__le32 power;
+	__le32 padding;
+};
+
+/* VIRTIO_GPU_CMD_BACKLIGHT_GET */
+struct virtio_gpu_get_brightness {
+	struct virtio_gpu_ctrl_hdr hdr;
+	__le32 backlight_id;
+	__le32 padding;
+};
+
+struct virtio_gpu_resp_brightness {
+	struct virtio_gpu_ctrl_hdr hdr;
+	__le32 brightness;
+	__le32 padding;
+};
+
+/* VIRTIO_GPU_CMD_BACKLIGHT_QUERY */
+struct virtio_gpu_get_backlight_info {
+	struct virtio_gpu_ctrl_hdr hdr;
+	__le32 backlight_id;
+	__le32 padding;
+};
+
+struct virtio_gpu_resp_backlight_info {
+	struct virtio_gpu_ctrl_hdr hdr;
+	__le32 brightness;
+	__le32 max_brightness;
+	__le32 power;
+	__le32 type;
+	__le32 scale;
 	__le32 padding;
 };
 
@@ -487,6 +535,7 @@ struct virtio_gpu_config {
 	__le32 num_scanouts;
 	__le32 num_capsets;
 	__le32 num_pipe;
+	__le32 num_backlight;
 };
 
 /* simple formats for fbcon/X use */
