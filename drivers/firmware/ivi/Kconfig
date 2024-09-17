@@ -1,0 +1,11 @@
+menu "ivi options"
+	depends on X86_64
+
+config IVI_SHARE_MEMORY
+	bool "Enable shared memory among SBL/Hyper/VM"
+	default y
+	help
+	  This is an option for use by developers; most people should
+	  say N here.  This enables the shared memory among SBL/Hyper/VM.
+
+endmenu

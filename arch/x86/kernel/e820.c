@@ -16,6 +16,7 @@
 #include <linux/firmware-map.h>
 #include <linux/sort.h>
 #include <linux/memory_hotplug.h>
+#include <linux/firmware/ivi/ivi_shm_utils.h>
 
 #include <asm/e820/api.h>
 #include <asm/setup.h>
@@ -1197,6 +1198,7 @@ void __init e820__reserve_resources(void)
 		struct e820_entry *entry = e820_table_firmware->entries + i;
 
 		firmware_map_add_early(entry->addr, entry->addr + entry->size, e820_type_to_string(entry));
+		ivi_shm_detect(entry->addr, entry->size, entry->type);
 	}
 }
 
