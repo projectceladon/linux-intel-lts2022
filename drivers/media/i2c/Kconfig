@@ -235,6 +235,16 @@ config VIDEO_IMX412
 	  To compile this driver as a module, choose M here: the
 	  module will be called imx412.
 
+config VIDEO_ISX031
+        tristate "Sony ISX031 sensor support"
+        depends on I2C && VIDEO_DEV
+        help
+          This is a Video4Linux2 sensor driver for the Sony
+          ISX031 camera.
+
+          To compile this driver as a module, choose M here: the
+          module will be called isx031.
+
 config VIDEO_MAX9271_LIB
 	tristate
 
