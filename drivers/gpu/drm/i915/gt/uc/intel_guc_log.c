@@ -683,7 +683,7 @@ err:
 void intel_guc_log_destroy(struct intel_guc_log *log)
 {
 	log->buf_addr = NULL;
-	i915_vma_unpin_and_release(&log->vma, I915_VMA_RELEASE_MAP);
+//	i915_vma_unpin_and_release(&log->vma, I915_VMA_RELEASE_MAP);
 }
 
 int intel_guc_log_set_level(struct intel_guc_log *log, u32 level)
