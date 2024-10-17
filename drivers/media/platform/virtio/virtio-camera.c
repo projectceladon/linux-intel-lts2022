@@ -157,6 +157,7 @@ static void virtio_camera_control_ack(struct virtqueue *vq)
 			vbuf->sequence = req->resp.u.buffer.sequence;
 			vbuf->vb2_buf.timestamp = req->resp.u.buffer.timestamp;
 			vbuf->planes[0].bytesused = req->resp.u.format.size.sizeimage;
+			req->vb->planes[0].bytesused = req->resp.u.format.size.sizeimage;
 			vb2_buffer_done(req->vb, VB2_BUF_STATE_DONE);
 			pr_debug("virtio-camera: mark the buffer done. UUID is %d, ptr is %pK\n",
 			req->resp.u.buffer.uuid[0] + req->resp.u.buffer.uuid[1], req->vb);
