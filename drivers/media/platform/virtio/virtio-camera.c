@@ -22,7 +22,7 @@
 #include <media/v4l2-ioctl.h>
 
 #include <asm/msr.h>
-#include "linux/virtio_shm.h"
+// #include "linux/virtio_shm.h"
 
 /* Log controls */
 #define V4L2_DEV_DEBUG_VCAM		0x80
@@ -162,8 +162,9 @@ static void virtio_camera_control_ack(struct virtqueue *vq)
 			vbuf->vb2_buf.timestamp = req->resp.u.buffer.timestamp;
 			vbuf->planes[0].bytesused = req->resp.u.format.size.sizeimage;
 			vb2_buffer_done(req->vb, VB2_BUF_STATE_DONE);
+
+			vnode = vb2_get_drv_priv(vbuf->vb2_buf.vb2_queue);
 			if(vnode->vdev.dev_debug & V4L2_DEV_DEBUG_VCAM) {
-				vnode = vb2_get_drv_priv(vbuf->vb2_buf.vb2_queue);
 				pr_info("virtio-camera: %s mark the buffer done. UUID is %d, ptr is %pK\n",
 					video_device_node_name(&vnode->vdev),
 					req->resp.u.buffer.uuid[0] + req->resp.u.buffer.uuid[1], req->vb);
@@ -658,14 +659,18 @@ static int vcam_buf_init(struct vb2_buffer *vb)
 	if (strcmp(vb->vb2_queue->dev->driver->name, "virtio-ivshmem") == 0 ||
 			strcmp(vb->vb2_queue->dev->driver->name, "virtio-guest-shm") == 0) {
 		pr_err("%s: sgl map addr by ivshmem\n",  __func__);
-		for_each_sg(sgt->sgl, sg, sgt->nents, i) {
-			ents[i].addr = virtio_shmem_page_to_dma_addr(vb->vb2_queue->dev, sg_page(sg));
-			ents[i].length = cpu_to_le32(sg->length);
-		}
+		// for_each_sg(sgt->sgl, sg, sgt->nents, i) {
+		// 	ents[i].addr = virtio_shmem_page_to_dma_addr(vb->vb2_queue->dev, sg_page(sg));
+		// 	ents[i].length = cpu_to_le32(sg->length);
+		// }
 	} else {
 		for_each_sg(sgt->sgl, sg, sgt->nents, i) {
 			ents[i].addr = cpu_to_le64(sg_phys(sg));
 			ents[i].length = cpu_to_le32(sg->length);
+			if(!IS_ALIGNED(ents[i].addr, PAGE_SHIFT) || !IS_ALIGNED(ents[i].length, PAGE_SHIFT)) {
+				pr_warn("virtio_camera: %s the buffer is not page align, addr: %lld, size: %d",
+				 video_device_node_name(&vnode->vdev), ents[i].addr, ents[i].length);
+			}
 		}
 	}
 
@@ -973,7 +978,7 @@ static int virtio_camera_setup_vnode(struct virtio_device *vdev,
 			vnode->vb_queue.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 			vnode->vb_queue.buf_struct_size = sizeof(struct virtio_camera_buffer);
 			vnode->vb_queue.timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
-			vnode->vb_queue.io_modes = VB2_MMAP | VB2_DMABUF;
+			vnode->vb_queue.io_modes = VB2_MMAP | VB2_DMABUF | VB2_USERPTR;
 			vnode->vb_queue.mem_ops = &vb2_dma_sg_memops;
 			vnode->vb_queue.lock = &vnode->video_lock;
 			vnode->vb_queue.min_buffers_needed = 1;
