@@ -666,6 +666,10 @@ static int vcam_buf_init(struct vb2_buffer *vb)
 		for_each_sg(sgt->sgl, sg, sgt->nents, i) {
 			ents[i].addr = cpu_to_le64(sg_phys(sg));
 			ents[i].length = cpu_to_le32(sg->length);
+			if(!IS_ALIGNED(ents[i].addr, PAGE_SHIFT) || !IS_ALIGNED(ents[i].length, PAGE_SHIFT)) {
+				pr_warn("virtio_camera: %s the buffer is not page align, addr: %lld, size: %d",
+				 video_device_node_name(&vnode->vdev), ents[i].addr, ents[i].length);
+			}
 		}
 	}
 
@@ -973,7 +977,7 @@ static int virtio_camera_setup_vnode(struct virtio_device *vdev,
 			vnode->vb_queue.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 			vnode->vb_queue.buf_struct_size = sizeof(struct virtio_camera_buffer);
 			vnode->vb_queue.timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
-			vnode->vb_queue.io_modes = VB2_MMAP | VB2_DMABUF;
+			vnode->vb_queue.io_modes = VB2_MMAP | VB2_DMABUF | VB2_USERPTR;
 			vnode->vb_queue.mem_ops = &vb2_dma_sg_memops;
 			vnode->vb_queue.lock = &vnode->video_lock;
 			vnode->vb_queue.min_buffers_needed = 1;
