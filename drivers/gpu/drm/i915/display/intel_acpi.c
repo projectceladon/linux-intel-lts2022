@@ -349,8 +349,13 @@ void intel_acpi_video_register(struct drm_i915_private *i915)
 	 */
 	drm_connector_list_iter_begin(&i915->drm, &conn_iter);
 	drm_for_each_connector_iter(connector, &conn_iter) {
-		struct intel_panel *panel = &to_intel_connector(connector)->panel;
+		struct intel_panel *panel;
+		struct intel_connector *intel_connector =
+					to_intel_connector(connector);
 
+		if (!intel_connector)
+			continue;
+		panel = &intel_connector->panel;
 		if (panel->backlight.funcs && !panel->backlight.device) {
 			acpi_video_register_backlight();
 			break;
