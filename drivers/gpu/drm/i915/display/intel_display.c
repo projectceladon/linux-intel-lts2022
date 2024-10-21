@@ -1173,12 +1173,28 @@ static void intel_crtc_disable_planes(struct intel_atomic_state *state,
 	intel_frontbuffer_flip(dev_priv, fb_bits);
 }
 
+static struct intel_encoder *
+intel_connector_primary_encoder(struct intel_connector *connector)
+{
+	struct intel_encoder *encoder;
+
+	if (connector->mst_port)
+		return &dp_to_dig_port(connector->mst_port)->base;
+
+	encoder = intel_attached_encoder(connector);
+	drm_WARN_ON(connector->base.dev, !encoder);
+
+	return encoder;
+}
+
 static void intel_encoders_update_prepare(struct intel_atomic_state *state)
 {
 	struct drm_i915_private *i915 = to_i915(state->base.dev);
 	struct intel_crtc_state *new_crtc_state, *old_crtc_state;
 	struct intel_crtc *crtc;
 	int i;
+	struct drm_connector_state *new_conn_state;
+	struct drm_connector *connector;
 
 	/*
 	 * Make sure the DPLL state is up-to-date for fastset TypeC ports after non-blocking commits.
@@ -1192,6 +1208,33 @@ static void intel_encoders_update_prepare(struct intel_atomic_state *state)
 			new_crtc_state->shared_dpll = old_crtc_state->shared_dpll;
 			new_crtc_state->dpll_hw_state = old_crtc_state->dpll_hw_state;
 		}
+	}
+
+	if (!state->modeset)
+		return;
+
+	for_each_new_connector_in_state(&state->base, connector, new_conn_state,
+					i) {
+		struct intel_connector *intel_connector;
+		struct intel_encoder *encoder;
+		struct intel_crtc *crtc;
+
+		if (!intel_connector_needs_modeset(state, connector))
+			continue;
+
+		intel_connector = to_intel_connector(connector);
+		/* intel_connector instance is not created for WD transcoder */
+		if (!intel_connector)
+			continue;
+#if 0
+		encoder = intel_connector_primary_encoder(intel_connector);
+		if (!encoder->update_prepare)
+			continue;
+
+		crtc = new_conn_state->crtc ?
+			to_intel_crtc(new_conn_state->crtc) : NULL;
+		encoder->update_prepare(state, encoder, crtc);
+#endif
 	}
 }
 

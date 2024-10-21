@@ -242,7 +242,7 @@ static bool intel_wb_get_hw_state(struct intel_encoder *encoder,
 	if (!wakeref)
 		goto out;
 
-	tmp = intel_de_read(dev_priv, PIPECONF(intel_wb->trans));
+	tmp = intel_de_read(dev_priv, TRANSCONF(intel_wb->trans));
 	ret = tmp & WD_TRANS_ACTIVE;
 	if (ret) {
 		drm_dbg_kms(&dev_priv->drm, "intel_wb_get_hw_state WD Transcode active\n");
@@ -354,9 +354,9 @@ static void intel_wb_disable_capture(struct intel_wb *intel_wb)
 	u32 tmp;
 
 	intel_de_write_fw(dev_priv, WD_IMR(intel_wb->trans), 0xFF);
-	tmp = intel_de_read(dev_priv, PIPECONF(intel_wb->trans));
+	tmp = intel_de_read(dev_priv, TRANSCONF(intel_wb->trans));
 	tmp &= WD_TRANS_DISABLE;
-	intel_de_write(dev_priv, PIPECONF(intel_wb->trans), tmp);
+	intel_de_write(dev_priv, TRANSCONF(intel_wb->trans), tmp);
 	tmp = intel_de_read(dev_priv, WD_TRANS_FUNC_CTL(intel_wb->trans));
 	tmp |= WD_TRANS_DISABLE;
 	intel_de_write(dev_priv, WD_TRANS_FUNC_CTL(intel_wb->trans), tmp);
@@ -464,11 +464,11 @@ static void wd_dump_details(struct intel_crtc *intel_crtc, struct intel_wb *inte
 	drm_dbg_kms(&dev_priv->drm, "WD Transocder: %05x, WD_FRAME_STATUS                     = %08x\n",
 		WD_FRAME_STATUS(intel_wb->trans).reg, intel_de_read(dev_priv, WD_FRAME_STATUS(intel_wb->trans)));
 	drm_dbg_kms(&dev_priv->drm, "WD Transocder: %05x, HTotal(TRANS_HTOTAL_WD0)            = %08x\n",
-		 HTOTAL(intel_wb->trans).reg, intel_de_read(dev_priv, HTOTAL(intel_wb->trans)));
+		TRANS_HTOTAL(intel_wb->trans).reg, intel_de_read(dev_priv, TRANS_HTOTAL(intel_wb->trans)));
 	drm_dbg_kms(&dev_priv->drm, "WD Transocder: %05x, VTotal(TRANS_VTOTAL_WD0)            = %08x\n",
-		 VTOTAL(intel_wb->trans).reg, intel_de_read(dev_priv, VTOTAL(intel_wb->trans)));
+		TRANS_VTOTAL(intel_wb->trans).reg, intel_de_read(dev_priv, TRANS_VTOTAL(intel_wb->trans)));
 	drm_dbg_kms(&dev_priv->drm, "WD Transcoder: %05x, Trans_Conf(TRANS_CONF_WD0)          = %08x\n",
-		 PIPECONF(intel_wb->trans).reg, intel_de_read(dev_priv, PIPECONF(intel_wb->trans)));
+		 TRANSCONF(intel_wb->trans).reg, intel_de_read(dev_priv, TRANSCONF(intel_wb->trans)));
 	drm_dbg_kms(&dev_priv->drm, "WD Transocder: %05x, WD_27_M_0                           = %08x\n",
 		WD_27_M(intel_wb->trans).reg, intel_de_read(dev_priv, WD_27_M(intel_wb->trans)));
 	drm_dbg_kms(&dev_priv->drm, "WD Transocder: %05x, WD_27_N_0                           = %08x\n",
@@ -570,20 +570,20 @@ static int intel_wb_setup_transcoder(struct intel_wb *intel_wb,
 
 	hactive = pipe_config->uapi.mode.hdisplay;
 	vactive = pipe_config->uapi.mode.vdisplay;
-	tmp = intel_de_read(dev_priv, HTOTAL(intel_wb->trans));
-	drm_dbg_kms(&dev_priv->drm, "HTOTAL: 0x%05x, tmp: 0x%08x\n", HTOTAL(intel_wb->trans).reg, tmp);
+	tmp = intel_de_read(dev_priv, TRANS_HTOTAL(intel_wb->trans));
+	drm_dbg_kms(&dev_priv->drm, "HTOTAL: 0x%05x, tmp: 0x%08x\n", TRANS_HTOTAL(intel_wb->trans).reg, tmp);
 	drm_dbg_kms(&dev_priv->drm, "hactive: 0x%08x\n", hactive);
 
-	tmp = intel_de_read(dev_priv, VTOTAL(intel_wb->trans));
-	drm_dbg_kms(&dev_priv->drm, "VTOTAL: 0x%05x, tmp: 0x%08x\n", VTOTAL(intel_wb->trans).reg, tmp);
+	tmp = intel_de_read(dev_priv, TRANS_VTOTAL(intel_wb->trans));
+	drm_dbg_kms(&dev_priv->drm, "VTOTAL: 0x%05x, tmp: 0x%08x\n", TRANS_VTOTAL(intel_wb->trans).reg, tmp);
 	drm_dbg_kms(&dev_priv->drm, "vactive: 0x%08x\n", vactive);
 
 	/* minimum hactive as per bspec: 64 pixels */
 	if (hactive < 64)
 		drm_err(&dev_priv->drm, "hactive is less then 64 pixels\n");
 
-	intel_de_write(dev_priv, HTOTAL(intel_wb->trans), hactive - 1);
-	intel_de_write(dev_priv, VTOTAL(intel_wb->trans), vactive - 1);
+	intel_de_write(dev_priv, TRANS_HTOTAL(intel_wb->trans), hactive - 1);
+	intel_de_write(dev_priv, TRANS_VTOTAL(intel_wb->trans), vactive - 1);
 
 	tmp = intel_de_read(dev_priv, WD_TRANS_FUNC_CTL(intel_wb->trans));
 	/* select pixel format */
@@ -655,19 +655,19 @@ static int intel_wb_setup_transcoder(struct intel_wb *intel_wb,
 	wd_dump_details(intel_crtc, intel_wb);
 	drm_dbg_kms(&dev_priv->drm, "wd_go5-A3 ------------------------------------------------------------\n");
 #endif
-	tmp = intel_de_read(dev_priv, PIPECONF(intel_wb->trans));
-	drm_dbg_kms(&dev_priv->drm, "PIPECONF: 0x%05x\n", PIPECONF(intel_wb->trans).reg);
+	tmp = intel_de_read(dev_priv, TRANSCONF(intel_wb->trans));
+	drm_dbg_kms(&dev_priv->drm, "TRANSCONF: 0x%05x\n", TRANSCONF(intel_wb->trans).reg);
 	ret = tmp & WD_TRANS_ACTIVE;
 	if (!ret) {
 		/* enable the transcoder */
-		tmp = intel_de_read(dev_priv, PIPECONF(intel_wb->trans));
+		tmp = intel_de_read(dev_priv, TRANSCONF(intel_wb->trans));
 		tmp |= WD_TRANS_ENABLE;
-		drm_dbg_kms(&dev_priv->drm, "PIPECONF: 0x%08x\n", tmp);
+		drm_dbg_kms(&dev_priv->drm, "TRANSCONF: 0x%08x\n", tmp);
 
-		intel_de_write(dev_priv, PIPECONF(intel_wb->trans), tmp);
+		intel_de_write(dev_priv, TRANSCONF(intel_wb->trans), tmp);
 
 		/* wait for transcoder to be enabled */
-		if (intel_de_wait_for_set(dev_priv, PIPECONF(intel_wb->trans),
+		if (intel_de_wait_for_set(dev_priv, TRANSCONF(intel_wb->trans),
 					  WD_TRANS_ACTIVE, 100))
 			drm_err(&dev_priv->drm, "WD transcoder could not be enabled\n");
 	}

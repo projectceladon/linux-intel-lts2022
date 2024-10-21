@@ -102,6 +102,24 @@ static void set_encoder_for_connector(struct intel_connector *connector,
 	struct drm_connector_state *conn_state = connector->base.state;
 
 	if (conn_state->crtc)
+		drm_connector_put(&connector->base);
+
+	if (encoder) {
+		conn_state->best_encoder = &encoder->base;
+		conn_state->crtc = encoder->base.crtc;
+		drm_connector_get(&connector->base);
+	} else {
+		conn_state->best_encoder = NULL;
+		conn_state->crtc = NULL;
+	}
+}
+
+static void set_encoder_for_drmconnector(struct drm_connector *connector,
+				      struct intel_encoder *encoder)
+{
+	struct drm_connector_state *conn_state = connector->state;
+
+	if (conn_state->crtc)
 		drm_connector_put(connector);
 
 	if (encoder) {
@@ -311,7 +329,8 @@ static void intel_modeset_update_connector_atomic_state(struct drm_i915_private 
 		struct intel_encoder *encoder =
 			to_intel_encoder(connector->encoder);
 
-		set_encoder_for_connector(connector, encoder);
+		//set_encoder_for_connector(connector, encoder);
+		set_encoder_for_drmconnector(connector, encoder);
 
 		if (encoder) {
 			struct intel_crtc *crtc =
