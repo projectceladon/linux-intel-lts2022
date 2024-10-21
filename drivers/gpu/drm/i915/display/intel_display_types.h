@@ -44,6 +44,7 @@
 #include <drm/drm_vblank.h>
 #include <drm/drm_vblank_work.h>
 #include <drm/i915_hdcp_interface.h>
+#include <drm/drm_writeback.h>
 #include <media/cec-notifier.h>
 
 #include "i915_vma.h"
@@ -1457,6 +1458,11 @@ struct intel_crtc {
 	bool cpu_fifo_underrun_disabled;
 	bool pch_fifo_underrun_disabled;
 
+	struct {
+		struct drm_pending_vblank_event *e;
+		atomic_t work_busy;
+		wait_queue_head_t wb_wait;
+	} wb;
 	/* per-pipe watermark state */
 	struct {
 		/* watermarks currently being used  */
@@ -2116,8 +2122,8 @@ intel_connector_list_iter_next(struct drm_connector_list_iter *iter)
 	struct drm_connector *connector;
 	bool flag = true;
 	/*
-	 * Skipping connector that are Writeback connector as they will
-	 * not be embedded in intel connector
+	 * An intel_connector entity is not created for a writeback
+	 * connector hence decoupling.
 	 */
 	while (flag) {
 		connector = drm_connector_list_iter_next(iter);

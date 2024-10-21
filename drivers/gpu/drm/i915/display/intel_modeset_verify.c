@@ -26,11 +26,16 @@
 static void intel_connector_verify_state(struct intel_crtc_state *crtc_state,
 					 struct drm_connector_state *conn_state)
 {
-	struct intel_connector *connector = to_intel_connector(conn_state->connector);
-	struct drm_i915_private *i915 = to_i915(connector->base.dev);
+	struct drm_connector *_connector = conn_state->connector;
+	struct intel_connector *connector;
+	struct drm_i915_private *i915 = to_i915(_connector->dev);
 
 	drm_dbg_kms(&i915->drm, "[CONNECTOR:%d:%s]\n",
-		    connector->base.base.id, connector->base.name);
+		    _connector->base.id, _connector->name);
+
+	connector = to_intel_connector(_connector);
+	if (!connector)
+		return;
 
 	if (connector->get_hw_state(connector)) {
 		struct intel_encoder *encoder = intel_attached_encoder(connector);
@@ -121,6 +126,9 @@ verify_encoder_state(struct drm_i915_private *dev_priv, struct intel_atomic_stat
 			    encoder->base.base.id,
 			    encoder->base.name);
 
+		if (encoder->type == INTEL_OUTPUT_WB)
+			continue;
+
 		for_each_oldnew_connector_in_state(&state->base, connector, old_conn_state,
 						   new_conn_state, i) {
 			if (old_conn_state->best_encoder == &encoder->base)
@@ -178,6 +186,9 @@ verify_crtc_state(struct intel_crtc *crtc,
 	pipe_config->hw.enable = new_crtc_state->hw.enable;
 
 	intel_crtc_get_pipe_config(pipe_config);
+
+	if (new_crtc_state->output_types & BIT(INTEL_OUTPUT_WB))
+		return;
 
 	/* we keep both pipes enabled on 830 */
 	if (IS_I830(dev_priv) && pipe_config->hw.active)
