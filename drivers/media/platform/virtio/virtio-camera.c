@@ -22,7 +22,10 @@
 #include <media/v4l2-ioctl.h>
 
 #include <asm/msr.h>
-#include "linux/virtio_shm.h"
+// #include "linux/virtio_shm.h"
+
+/* Log controls */
+#define V4L2_DEV_DEBUG_VCAM		0x80
 
 #define VQ_NAME_LEN	24
 /**
@@ -146,6 +149,7 @@ static void virtio_camera_control_ack(struct virtqueue *vq)
 	struct virtio_camera_vq *vcam_vq = vq_to_vcamvq(vq);
 	struct virtio_camera_ctrl_req *req;
 	struct vb2_v4l2_buffer *vbuf;
+	struct virtio_camera_video *vnode;
 	unsigned int len;
 
 	spin_lock_irq(&vcam_vq->lock);
@@ -158,8 +162,13 @@ static void virtio_camera_control_ack(struct virtqueue *vq)
 			vbuf->vb2_buf.timestamp = req->resp.u.buffer.timestamp;
 			vbuf->planes[0].bytesused = req->resp.u.format.size.sizeimage;
 			vb2_buffer_done(req->vb, VB2_BUF_STATE_DONE);
-			pr_debug("virtio-camera: mark the buffer done. UUID is %d, ptr is %pK\n",
-			req->resp.u.buffer.uuid[0] + req->resp.u.buffer.uuid[1], req->vb);
+
+			vnode = vb2_get_drv_priv(vbuf->vb2_buf.vb2_queue);
+			if(vnode->vdev.dev_debug & V4L2_DEV_DEBUG_VCAM) {
+				pr_info("virtio-camera: %s mark the buffer done. UUID is %d, ptr is %pK\n",
+					video_device_node_name(&vnode->vdev),
+					req->resp.u.buffer.uuid[0] + req->resp.u.buffer.uuid[1], req->vb);
+			}
 
 			kfree(req);
 		}
@@ -192,7 +201,7 @@ static int vcam_vq_request(struct virtio_camera_video *vnode,
 	spin_lock_irq(&vnode->ctr_vqx->lock);
 	ret = virtqueue_add_sgs(vnode->ctr_vqx->vq, sgs, num_sgs - 1, 1, req, GFP_KERNEL);
 	if (ret) {
-		pr_err("%s: fail to add req to vq, errno is %d\n", __func__, ret);
+		pr_err("%s: %s fail to add req to vq, errno is %d\n", __func__, video_device_node_name(&vnode->vdev), ret);
 		spin_unlock_irq(&vnode->ctr_vqx->lock);
 		return ret;
 	}
@@ -238,13 +247,13 @@ int vcam_v4l2_fh_open(struct file *filp)
 
 	vcam_req = virtio_camera_create_req(VIRTIO_CAMERA_CMD_FILE_OPEN);
 	if (unlikely(vcam_req == NULL)) {
-		pr_err("virtio-camera: vnode%d fail to init open-req, no mem.\n", vnode->idx);
+		pr_err("virtio-camera: %s fail to init open-req, no mem.\n", video_device_node_name(&vnode->vdev));
 		return -ENOMEM;
 	}
 
 	err = vcam_vq_request(vnode, vcam_req, NULL, 0, false);
 	if (err) {
-		pr_err("virtio-camera: vnode%d file handler open failed, err response.\n", vnode->idx);
+		pr_err("virtio-camera: %s file handler open failed, err response.\n", video_device_node_name(&vnode->vdev));
 		goto err_free;
 	}
 
@@ -268,13 +277,13 @@ int vcam_v4l2_fh_release(struct file *filp)
 	vnode = video_drvdata(filp);
 	vcam_req = virtio_camera_create_req(VIRTIO_CAMERA_CMD_FILE_CLOSE);
 	if (unlikely(vcam_req == NULL)) {
-		pr_err("virtio-camera: vnode%d fail to init close-req, no mem.\n", vnode->idx);
+		pr_err("virtio-camera: %s fail to init close-req, no mem.\n", video_device_node_name(&vnode->vdev));
 		return -ENOMEM;
 	}
 
 	err = vcam_vq_request(vnode, vcam_req, NULL, 0, false);
 	if (err)
-		pr_err("virtio-camera: vnode%d release file failed, err response.\n", vnode->idx);
+		pr_err("virtio-camera: %s release file failed, err response.\n", video_device_node_name(&vnode->vdev));
 
 	kfree(vcam_req);
 	return err;
@@ -296,7 +305,7 @@ static int vcam_querycap(struct file *file, void *priv,
 
 	strscpy(cap->bus_info, "platform:camera", sizeof(cap->bus_info));
 	strscpy(cap->driver, "virtio-camera", sizeof(cap->driver));
-	snprintf(cap->card, sizeof(cap->card), "virtio-camera%u", vnode->idx);
+	snprintf(cap->card, sizeof(cap->card), "virtio-camera-node%u", vnode->idx);
 	return 0;
 }
 
@@ -308,15 +317,15 @@ static int vcam_enum_fmt(struct file *file, void *fh, struct v4l2_fmtdesc *f)
 
 	vcam_req = virtio_camera_create_req(VIRTIO_CAMERA_CMD_ENUM_FORMAT);
 	if (unlikely(vcam_req == NULL)) {
-		pr_err("virtio-camera: vnode%d fail to init enum_fmt-req, no mem.\n", vnode->idx);
+		pr_err("virtio-camera: %s fail to init enum_fmt-req, no mem.\n", video_device_node_name(&vnode->vdev));
 		return -ENOMEM;
 	}
 
 	vcam_req->ctrl.header.index = f->index;
 
 	err = vcam_vq_request(vnode, vcam_req, NULL, 0, false);
-	if (err) {
-		pr_err("virtio-camera: vnode%d enum_fmt failed, err response.\n", vnode->idx);
+	if (err && f->index == 0) {
+		pr_err("virtio-camera: %s enum_fmt failed, err response.\n", video_device_node_name(&vnode->vdev));
 		goto err_free;
 	}
 
@@ -337,7 +346,7 @@ static int vcam_enum_framesizes(struct file *file, void *fh,
 
 	vcam_req = virtio_camera_create_req(VIRTIO_CAMERA_CMD_ENUM_SIZE);
 	if (unlikely(vcam_req == NULL)) {
-		pr_err("virtio-camera: vnode%d fail to init enum_size-req, no mem.\n", vnode->idx);
+		pr_err("virtio-camera: %s fail to init enum_size-req, no mem.\n", video_device_node_name(&vnode->vdev));
 		return -ENOMEM;
 	}
 
@@ -345,8 +354,8 @@ static int vcam_enum_framesizes(struct file *file, void *fh,
 	vcam_req->ctrl.u.format.pixelformat = fsize->pixel_format;
 
 	err = vcam_vq_request(vnode, vcam_req, NULL, 0, false);
-	if (err) {
-		pr_err("virtio-camera: vnode%d enum_size failed, err response.\n", vnode->idx);
+	if (err && fsize->index == 0) {
+		pr_err("virtio-camera: %s enum_size failed, err response.\n", video_device_node_name(&vnode->vdev));
 		goto err_free;
 	}
 
@@ -369,7 +378,9 @@ static int vcam_enum_framesizes(struct file *file, void *fh,
 		else
 			fsize->type = V4L2_FRMSIZE_TYPE_STEPWISE;
 	}
-	pr_debug("%s: fmt width is %d, height is %d\n", __func__, sz->width, sz->height);
+	if(vnode->vdev.dev_debug & V4L2_DEV_DEBUG_VCAM)
+		pr_info("%s: %s fmt width is %d, height is %d\n", __func__,
+			video_device_node_name(&vnode->vdev), sz->width, sz->height);
 
 err_free:
 	kfree(vcam_req);
@@ -386,7 +397,7 @@ static int vcam_enum_frameintervals(struct file *file, void *fh,
 
 	vcam_req = virtio_camera_create_req(VIRTIO_CAMERA_CMD_ENUM_INTV);
 	if (unlikely(vcam_req == NULL)) {
-		pr_err("virtio-camera: vnode%d fail to init enum_interval-req, no mem.\n", vnode->idx);
+		pr_err("virtio-camera: %s fail to init enum_interval-req, no mem.\n", video_device_node_name(&vnode->vdev));
 		return -ENOMEM;
 	}
 
@@ -397,16 +408,17 @@ static int vcam_enum_frameintervals(struct file *file, void *fh,
 
 	err = vcam_vq_request(vnode, vcam_req, NULL, 0, false);
 	sz = &vcam_req->resp.u.format.size;
-	if (err) {
-		pr_err("virtio-camera: vnode%d enum_interval failed, err response.\n", vnode->idx);
+	if (err && fintv->index ==0) {
+		pr_err("virtio-camera: %s enum_interval failed, err response.\n", video_device_node_name(&vnode->vdev));
 		goto err_free;
 	}
 
 	fintv->type = V4L2_FRMIVAL_TYPE_DISCRETE;
 	fintv->discrete.denominator = sz->fps;
 	fintv->discrete.numerator = 1;
-	pr_debug("%s: idx is %d, denominator is %d, numerator is %d\n", __func__,
-		fintv->index, fintv->discrete.denominator, fintv->discrete.numerator);
+	if(vnode->vdev.dev_debug & V4L2_DEV_DEBUG_VCAM)
+		pr_info("%s: %s idx is %d, denominator is %d, numerator is %d\n", __func__,
+			video_device_node_name(&vnode->vdev), fintv->index, fintv->discrete.denominator, fintv->discrete.numerator);
 
 err_free:
 	kfree(vcam_req);
@@ -421,13 +433,13 @@ static int vcam_g_fmt(struct file *file, void *fh, struct v4l2_format *f)
 
 	vcam_req = virtio_camera_create_req(VIRTIO_CAMERA_CMD_GET_FORMAT);
 	if (unlikely(vcam_req == NULL)) {
-		pr_err("virtio-camera: vnode%d fail to init get_fmt-req, no mem.\n", vnode->idx);
+		pr_err("virtio-camera: %s fail to init get_fmt-req, no mem.\n", video_device_node_name(&vnode->vdev));
 		return -ENOMEM;
 	}
 
 	err = vcam_vq_request(vnode, vcam_req, NULL, 0, false);
 	if (err) {
-		pr_err("virtio-camera: vnode%d get_fmt failed, err response.\n", vnode->idx);
+		pr_err("virtio-camera: %s get_fmt failed, err response.\n", video_device_node_name(&vnode->vdev));
 		goto err_free;
 	}
 
@@ -459,13 +471,13 @@ static int vcam_s_fmt(struct file *file, void *fh, struct v4l2_format *f)
 	int err;
 
 	if (f->type != V4L2_BUF_TYPE_VIDEO_CAPTURE) {
-		pr_err("virtio-camera: vnode%d only support video capture buffer.\n", vnode->idx);
+		pr_err("virtio-camera: %s only support video capture buffer.\n", video_device_node_name(&vnode->vdev));
 		return -EINVAL;
 	}
 
 	vcam_req = virtio_camera_create_req(VIRTIO_CAMERA_CMD_SET_FORMAT);
 	if (unlikely(vcam_req == NULL)) {
-		pr_err("virtio-camera: vnode%d fail to init set_fmt-req, no mem.\n", vnode->idx);
+		pr_err("virtio-camera: %s fail to init set_fmt-req, no mem.\n", video_device_node_name(&vnode->vdev));
 		return -ENOMEM;
 	}
 
@@ -476,7 +488,7 @@ static int vcam_s_fmt(struct file *file, void *fh, struct v4l2_format *f)
 
 	err = vcam_vq_request(vnode, vcam_req, NULL, 0, false);
 	if (err) {
-		pr_err("virtio-camera: vnode%d set_fmt failed, err response.\n", vnode->idx);
+		pr_err("virtio-camera: %s set_fmt failed, err response.\n", video_device_node_name(&vnode->vdev));
 		goto err_free;
 	}
 
@@ -507,7 +519,7 @@ static int vcam_try_fmt(struct file *file, void *fh, struct v4l2_format *f)
 
 	vcam_req = virtio_camera_create_req(VIRTIO_CAMERA_CMD_TRY_FORMAT);
 	if (unlikely(vcam_req == NULL)) {
-		pr_err("virtio-camera: vnode%d fail to init try_fmt-req, no mem.\n", vnode->idx);
+		pr_err("virtio-camera: %s fail to init try_fmt-req, no mem.\n", video_device_node_name(&vnode->vdev));
 		return -ENOMEM;
 	}
 
@@ -518,7 +530,7 @@ static int vcam_try_fmt(struct file *file, void *fh, struct v4l2_format *f)
 
 	err = vcam_vq_request(vnode, vcam_req, NULL, 0, false);
 	if (err) {
-		pr_err("virtio-camera: vnode%d try_fmt failed, err response.\n", vnode->idx);
+		pr_err("virtio-camera: %s try_fmt failed, err response.\n", video_device_node_name(&vnode->vdev));
 		goto err_free;
 	}
 
@@ -609,8 +621,8 @@ vcam_queue_setup(struct vb2_queue *vq,
 	if (*num_planes) {
 		ret = sizes[0] < size ? -EINVAL : 0;
 		if (ret != 0)
-			pr_err("virtio-camera: vnode%d fail to setup queue,\
-			size[0]=%d is invalid.\n", vnode->idx, sizes[0]);
+			pr_err("virtio-camera: %s fail to setup queue,\
+			size[0]=%d is invalid.\n", video_device_node_name(&vnode->vdev), sizes[0]);
 		return ret;
 	}
 
@@ -633,34 +645,38 @@ static int vcam_buf_init(struct vb2_buffer *vb)
 
 	/* TODO */
 	if (WARN_ON(vb->num_planes != 1)) {
-		pr_err("virtio-camera: vnode%d fail to init buffer, only support 1 plane buffer.\n", vnode->idx);
+		pr_err("virtio-camera: %s fail to init buffer, only support 1 plane buffer.\n", video_device_node_name(&vnode->vdev));
 		return -EINVAL;
 	}
 
 	sgt = vb2_dma_sg_plane_desc(vb, 0);
 	ents = kmalloc_array(sgt->nents, sizeof(*ents), GFP_KERNEL);
 	if (!ents) {
-		pr_err("virtio-camera: vnode%d fail to init buffer, no mem", vnode->idx);
+		pr_err("virtio-camera: %s fail to init buffer, no mem", video_device_node_name(&vnode->vdev));
 		return -ENOMEM;
 	}
 
 	if (strcmp(vb->vb2_queue->dev->driver->name, "virtio-ivshmem") == 0 ||
 			strcmp(vb->vb2_queue->dev->driver->name, "virtio-guest-shm") == 0) {
 		pr_err("%s: sgl map addr by ivshmem\n",  __func__);
-		for_each_sg(sgt->sgl, sg, sgt->nents, i) {
-			ents[i].addr = virtio_shmem_page_to_dma_addr(vb->vb2_queue->dev, sg_page(sg));
-			ents[i].length = cpu_to_le32(sg->length);
-		}
+		// for_each_sg(sgt->sgl, sg, sgt->nents, i) {
+		// 	ents[i].addr = virtio_shmem_page_to_dma_addr(vb->vb2_queue->dev, sg_page(sg));
+		// 	ents[i].length = cpu_to_le32(sg->length);
+		// }
 	} else {
 		for_each_sg(sgt->sgl, sg, sgt->nents, i) {
 			ents[i].addr = cpu_to_le64(sg_phys(sg));
 			ents[i].length = cpu_to_le32(sg->length);
+			if(!IS_ALIGNED(ents[i].addr, PAGE_SHIFT) || !IS_ALIGNED(ents[i].length, PAGE_SHIFT)) {
+				pr_warn("virtio_camera: %s the buffer is not page align, addr: %lld, size: %d",
+				 video_device_node_name(&vnode->vdev), ents[i].addr, ents[i].length);
+			}
 		}
 	}
 
 	vcam_req = virtio_camera_create_req(VIRTIO_CAMERA_CMD_CREATE_BUFFER);
 	if (unlikely(vcam_req == NULL)) {
-		pr_err("virtio-camera: vnode%d fail to init create_buffer-req, no mem.\n", vnode->idx);
+		pr_err("virtio-camera: %s fail to init create_buffer-req, no mem.\n", video_device_node_name(&vnode->vdev));
 		err = -ENOMEM;
 		goto fail_alloc_req;
 	}
@@ -669,7 +685,7 @@ static int vcam_buf_init(struct vb2_buffer *vb)
 
 	err = vcam_vq_request(vnode, vcam_req, ents, sgt->nents, false);
 	if (err) {
-		pr_err("virtio-camera: vnode%d create_buffer failed, err response.\n", vnode->idx);
+		pr_err("virtio-camera: %s create_buffer failed, err response.\n", video_device_node_name(&vnode->vdev));
 		goto err_free;
 	}
 
@@ -693,15 +709,15 @@ static void vcam_buf_cleanup(struct vb2_buffer *vb)
 
 	vcam_req = virtio_camera_create_req(VIRTIO_CAMERA_CMD_DESTROY_BUFFER);
 	if (unlikely(vcam_req == NULL)) {
-		pr_err("%s: Failed to clean vcam buffer\n", __func__);
+		pr_err("%s: %s Failed to clean vcam buffer\n", __func__, video_device_node_name(&vnode->vdev));
 		return;
 	}
 
 	memcpy(vcam_req->ctrl.u.buffer.uuid, vbuf->uuid, sizeof(vbuf->uuid));
 	err = vcam_vq_request(vnode, vcam_req, NULL, 0, false);
 	if (err) {
-		pr_err("%s: Failed to deinit virtio-camera buffers, buffers may still be retained by backend\n",
-		     __func__);
+		pr_err("%s: %s Failed to deinit virtio-camera buffers, buffers may still be retained by backend\n",
+		     __func__, video_device_node_name(&vnode->vdev));
 	}
 	kfree(vcam_req);
 }
@@ -724,7 +740,7 @@ static void vcam_buf_queue(struct vb2_buffer *vb)
 
 	vcam_req = virtio_camera_create_req(VIRTIO_CAMERA_CMD_ENQUEUE_BUFFER);
 	if (unlikely(vcam_req == NULL)) {
-		pr_err("virtio-camera: vnode%d fail to init enqueue_buffer-req, no mem.\n", vnode->idx);
+		pr_err("virtio-camera: %s fail to init enqueue_buffer-req, no mem.\n", video_device_node_name(&vnode->vdev));
 		vb2_buffer_done(vb, VB2_BUF_STATE_ERROR);
 		return;
 	}
@@ -733,14 +749,15 @@ static void vcam_buf_queue(struct vb2_buffer *vb)
 	vcam_req->vb = vb;
 	err = vcam_vq_request(vnode, vcam_req, NULL, 0, true);
 	if (err) {
-		pr_err("virtio-camera: vnode%d enqueue_buffer failed, err response, errno %d\n", vnode->idx, err);
+		pr_err("virtio-camera: %s enqueue_buffer failed, err response, errno %d\n", video_device_node_name(&vnode->vdev), err);
 		vb2_buffer_done(vb, VB2_BUF_STATE_ERROR);
 		goto err_free;
 	}
 
-	pr_debug("%s: video%d queue a buffer, success. UUID is %d, ptr is %pK\n",
-	__func__, vnode->idx, vcam_req->resp.u.buffer.uuid[0] + vcam_req->resp.u.buffer.uuid[1],
-	 vcam_req->vb);
+	if(vnode->vdev.dev_debug & V4L2_DEV_DEBUG_VCAM)
+		pr_info("%s: %s queue a buffer, success. UUID is %d, ptr is %pK\n",
+			__func__, video_device_node_name(&vnode->vdev),
+			vcam_req->resp.u.buffer.uuid[0] + vcam_req->resp.u.buffer.uuid[1], vcam_req->vb);
 
 	return;
 
@@ -757,13 +774,13 @@ static int vcam_start_streaming(struct vb2_queue *q, unsigned int count)
 	vnode->sequence = 0;
 	vcam_req = virtio_camera_create_req(VIRTIO_CAMERA_CMD_STREAM_ON);
 	if (unlikely(vcam_req == NULL)) {
-		pr_err("virtio-camera: vnode%d fail to init stream_on-req, no mem.\n", vnode->idx);
+		pr_err("virtio-camera: %s fail to init stream_on-req, no mem.\n", video_device_node_name(&vnode->vdev));
 		return -ENOMEM;
 	}
 
 	err = vcam_vq_request(vnode, vcam_req, NULL, 0, false);
 	if (err)
-		pr_err("virtio-camera: vnode%d stream_on failed, err response.\n", vnode->idx);
+		pr_err("virtio-camera: %s stream_on failed, err response.\n", video_device_node_name(&vnode->vdev));
 
 	kfree(vcam_req);
 	return err;
@@ -777,14 +794,14 @@ static void vcam_stop_streaming(struct vb2_queue *q)
 
 	vcam_req = virtio_camera_create_req(VIRTIO_CAMERA_CMD_STREAM_OFF);
 	if (unlikely(vcam_req == NULL)) {
-		pr_err("virtio-camera: vnode%d fail to init stream_off-req, no mem.\n", vnode->idx);
+		pr_err("virtio-camera: %s fail to init stream_off-req, no mem.\n", video_device_node_name(&vnode->vdev));
 		return;
 	}
 
 	/*TODO, mark all vcam buffers invalid when err occur*/
 	err = vcam_vq_request(vnode, vcam_req, NULL, 0, false);
 	if (err)
-		pr_err("virtio-camera: vnode%d stream_off failed, err response.\n", vnode->idx);
+		pr_err("virtio-camera: %s stream_off failed, err response.\n", video_device_node_name(&vnode->vdev));
 
 	vb2_wait_for_all_buffers(q);
 	kfree(vcam_req);
@@ -961,7 +978,7 @@ static int virtio_camera_setup_vnode(struct virtio_device *vdev,
 			vnode->vb_queue.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 			vnode->vb_queue.buf_struct_size = sizeof(struct virtio_camera_buffer);
 			vnode->vb_queue.timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
-			vnode->vb_queue.io_modes = VB2_MMAP | VB2_DMABUF;
+			vnode->vb_queue.io_modes = VB2_MMAP | VB2_DMABUF | VB2_USERPTR;
 			vnode->vb_queue.mem_ops = &vb2_dma_sg_memops;
 			vnode->vb_queue.lock = &vnode->video_lock;
 			vnode->vb_queue.min_buffers_needed = 1;
