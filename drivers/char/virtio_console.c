@@ -2191,6 +2191,10 @@ static int virtcons_restore(struct virtio_device *vdev)
 
 	portdev = vdev->priv;
 
+	ret = virtio_device_reset_and_restore_status(vdev);
+	if (ret)
+		return ret;
+
 	ret = init_vqs(portdev);
 	if (ret)
 		return ret;

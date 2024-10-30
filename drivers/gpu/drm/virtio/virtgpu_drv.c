@@ -201,6 +201,10 @@ static int virtgpu_restore(struct virtio_device *vdev)
 	struct virtio_gpu_device *vgdev = dev->dev_private;
 	int error, i;
 
+	error = virtio_device_reset_and_restore_status(vdev);
+	if (error)
+		return error;
+
 	error = virtio_gpu_find_vqs(vgdev);
 	if (error) {
 		DRM_ERROR("failed to find virt queues\n");

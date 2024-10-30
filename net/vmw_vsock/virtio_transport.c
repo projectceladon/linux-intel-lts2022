@@ -782,6 +782,10 @@ static int virtio_vsock_restore(struct virtio_device *vdev)
 
 	mutex_lock(&the_virtio_vsock_mutex);
 
+	ret = virtio_device_reset_and_restore_status(vdev);
+	if (ret)
+		return ret;
+
 	/* Only one virtio-vsock device per guest is supported */
 	if (rcu_dereference_protected(the_virtio_vsock,
 				lockdep_is_held(&the_virtio_vsock_mutex))) {
