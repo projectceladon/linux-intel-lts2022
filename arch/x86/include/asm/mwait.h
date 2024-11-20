@@ -7,6 +7,7 @@
 
 #include <asm/cpufeature.h>
 #include <asm/nospec-branch.h>
+#include <asm/hypervisor.h>
 
 #define MWAIT_SUBSTATE_MASK		0xf
 #define MWAIT_CSTATE_MASK		0xf
@@ -115,8 +116,13 @@ static inline void mwait_idle_with_hints(unsigned long eax, unsigned long ecx)
 		}
 
 		__monitor((void *)&current_thread_info()->flags, 0, 0);
-		if (!need_resched())
+		if (!need_resched()) {
+			if (hypervisor_is_type(X86_HYPER_ACRN)) {
+				current_clr_polling();
+				ecx |= 0x4;
+			}
 			__mwait(eax, ecx);
+		}
 	}
 	current_clr_polling();
 }
