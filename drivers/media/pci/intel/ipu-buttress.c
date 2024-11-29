@@ -989,6 +989,7 @@ int ipu_get_i2c_bus_id(int adapter_id, char *adapter_bdf, int bdf_len)
 
 			if (pp && !strncmp(adapter_bdf, dev_name(pp), bdf_len))
 				return i;
+			i2c_put_adapter(adapter);
 			i++;
 		}
 	}
@@ -1000,6 +1001,7 @@ int ipu_get_i2c_bus_id(int adapter_id, char *adapter_bdf, int bdf_len)
 
 		if (parent && !strncmp(name, dev_name(parent), sizeof(name)))
 			return i;
+		i2c_put_adapter(adapter);
 		i++;
 	}
 
