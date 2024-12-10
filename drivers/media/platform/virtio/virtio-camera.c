@@ -1062,6 +1062,63 @@ static void virtio_camera_remove(struct virtio_device *vdev)
 	vdev->config->del_vqs(vdev);
 }
 
+#ifdef CONFIG_PM
+
+int virtio_camera_freeze(struct virtio_device *dev) {
+	struct virtio_camera *vcam = dev->priv;
+	struct virtio_camera_video *vnode;
+	struct virtio_camera_ctrl_req *vcam_req;
+	int err;
+	int i;
+
+	for (i = 0; i < vcam->config.num_virtual_cameras; i++) {
+		vnode = &vcam->virtual_cameras[i].vnodes[0];
+		vnode->sequence = 0;
+		vcam_req = virtio_camera_create_req(VIRTIO_CAMERA_CMD_FREEZE);
+		if (unlikely(vcam_req == NULL)) {
+			pr_err("virtio-camera: vnode%d fail to init stream_on-req, no mem.\n",
+			       vnode->idx);
+			return -ENOMEM;
+		}
+
+		err = vcam_vq_request(vnode, vcam_req, NULL, 0, false);
+		if (err)
+			pr_err("virtio-camera: vnode%d freeze failed, err response.\n",
+			       vnode->idx);
+		kfree(vcam_req);
+	}
+	pr_err("virtio-camera: freeze for S3\n");
+	return err;
+};
+
+int virtio_camera_restore(struct virtio_device *dev) {
+	struct virtio_camera *vcam = dev->priv;
+	struct virtio_camera_video *vnode;
+	struct virtio_camera_ctrl_req *vcam_req;
+	int err;
+	int i;
+
+	for (i = 0; i < vcam->config.num_virtual_cameras; i++) {
+		vnode = &vcam->virtual_cameras[i].vnodes[0];
+		vnode->sequence = 0;
+		vcam_req = virtio_camera_create_req(VIRTIO_CAMERA_CMD_RESTORE);
+		if (unlikely(vcam_req == NULL)) {
+			pr_err("virtio-camera: vnode%d fail to init stream_on-req, no mem.\n",
+			       vnode->idx);
+			return -ENOMEM;
+		}
+
+		err = vcam_vq_request(vnode, vcam_req, NULL, 0, false);
+		if (err)
+			pr_err("virtio-camera: vnode%d restore failed, err response.\n",
+			       vnode->idx);
+		kfree(vcam_req);
+	}
+	pr_err("virtio-camera: restore for S3\n");
+	return err;
+};
+#endif
+
 static const unsigned int features[] = {
 	/* none */
 };
@@ -1078,8 +1135,14 @@ static struct virtio_driver virtio_camera_driver = {
 	.probe = virtio_camera_probe,
 	.remove = virtio_camera_remove,
 	.driver.name = "virtio-camera",
+
 	.id_table = id_table,
+#ifdef CONFIG_PM
+	.freeze = virtio_camera_freeze,
+	.restore = virtio_camera_restore,
+#endif
 };
+
 module_virtio_driver(virtio_camera_driver);
 
 MODULE_AUTHOR("Dmitry Osipenko <dmitry.osipenko@collabora.com>");
