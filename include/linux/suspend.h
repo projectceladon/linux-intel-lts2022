@@ -11,6 +11,7 @@
 #include <linux/android_kabi.h>
 #include <asm/errno.h>
 
+extern ktime_t acpi_resume_begin;
 #ifdef CONFIG_VT
 extern void pm_set_vt_switch(int);
 #else

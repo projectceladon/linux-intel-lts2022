@@ -27,6 +27,7 @@
 
 #include <linux/dma-fence.h>
 #include <linux/ktime.h>
+#include <linux/suspend.h>
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
@@ -2517,6 +2518,14 @@ void drm_atomic_helper_commit_hw_done(struct drm_atomic_state *old_state)
 		complete_all(&old_state->fake_commit->hw_done);
 		complete_all(&old_state->fake_commit->flip_done);
 	}
+
+	if (old_state->resume == true) {
+		old_state->resume = false;
+		ktime_t now = ktime_get();
+		u64 period_ns = ktime_to_ns(ktime_sub(now, acpi_resume_begin));
+		drm_info(crtc->dev, "The period from S3 resume to the first display atomic commit: %lld\n",
+			(long long)period_ns);
+	}
 }
 EXPORT_SYMBOL(drm_atomic_helper_commit_hw_done);
 
@@ -3572,6 +3581,7 @@ int drm_atomic_helper_resume(struct drm_device *dev,
 	int err;
 
 	drm_mode_config_reset(dev);
+	state->resume = true;
 
 	DRM_MODESET_LOCK_ALL_BEGIN(dev, ctx, 0, err);
 

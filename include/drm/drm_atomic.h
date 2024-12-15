@@ -428,6 +428,14 @@ struct drm_atomic_state {
 	 * commit without blocking.
 	 */
 	struct work_struct commit_work;
+
+	/**
+	 * @resume:
+	 *
+	 * Indicate if system just resume from S3, will used it to control if print
+	 * the first commit period.
+	 */
+	bool resume : 1;
 };
 
 void __drm_crtc_commit_free(struct kref *kref);
