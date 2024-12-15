@@ -32,6 +32,7 @@
  */
 bool acpi_no_s5;
 static u8 sleep_states[ACPI_S_STATE_COUNT];
+ktime_t acpi_resume_begin;
 
 static void acpi_sleep_tts_switch(u32 acpi_state)
 {
@@ -598,6 +599,7 @@ static int acpi_suspend_enter(suspend_state_t pm_state)
 		if (error)
 			return error;
 		pr_info("Low-level resume complete\n");
+		acpi_resume_begin = ktime_get();
 		pm_set_resume_via_firmware();
 		break;
 	}
