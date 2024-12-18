@@ -286,6 +286,7 @@ err_free_gem:
 
 int virtio_gpu_object_restore_all(struct virtio_gpu_device *vgdev)
 {
+	printk("-yue virtgpu_object: virtio_gpu_object_restore_all\n ");
 	struct virtio_gpu_object_restore *curr, *tmp;
 	struct virtio_gpu_mem_entry *ents;
 	unsigned int nents;
@@ -293,21 +294,28 @@ int virtio_gpu_object_restore_all(struct virtio_gpu_device *vgdev)
 
 	list_for_each_entry_safe(curr, tmp, &vgdev->obj_rec, node) {
 		ret = virtio_gpu_object_shmem_init(vgdev, curr->bo, &ents, &nents);
-		if (ret)
+		if (ret) {
+			printk("--yue-- before break\n");
 			break;
+		}
 
 		if (curr->params.blob) {
+			printk("-yue params.blob\n");
 			virtio_gpu_cmd_resource_create_blob(vgdev, curr->bo, &curr->params,
 							    ents, nents);
 		} else if (curr->params.virgl) {
+			printk("-yue params.virgl\n");
 			virtio_gpu_cmd_resource_create_3d(vgdev, curr->bo, &curr->params,
 							  NULL, NULL);
 			virtio_gpu_object_attach(vgdev, curr->bo, ents, nents);
 		} else {
+			printk("-yue else\n");
 			virtio_gpu_cmd_create_resource(vgdev, curr->bo, &curr->params,
 						       NULL, NULL);
 			virtio_gpu_object_attach(vgdev, curr->bo, ents, nents);
 		}
+		printk("-yue- curr->bo hw_res_handle is %x\n", curr->bo->hw_res_handle);
+		printk("-yue- ents addr is  %llx\n", ents->addr);
 	}
 
 	return ret;
