@@ -273,17 +273,21 @@ struct drm_gem_object *virtgpu_gem_prime_import_sg_table(
 		__func__, table, table->orig_nents, table->nents);
 	obj = drm_gem_shmem_prime_import_sg_table(dev, attach, table);
 	if (IS_ERR(obj)) {
+		printk("--yue-- IS_ERR\n");
 		return ERR_CAST(obj);
 	}
 
 	bo = gem_to_virtio_gpu_obj(obj);
+	printk("--yue-- bo->hw_res_handle is %x \n", bo->hw_res_handle);
 	ret = virtio_gpu_resource_id_get(vgdev, &bo->hw_res_handle);
 	if (ret < 0) {
+		printk("yue- ret < 0\n");
 		return ERR_PTR(ret);
 	}
 
 	ret = virtio_gpu_sgt_to_mem_entry(vgdev, table, &ents, &nents);
 	if (ret != 0) {
+		printk("yue- ret != 0\n");
 		goto err_put_id;
 	}
 
