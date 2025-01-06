@@ -89,4 +89,13 @@ config VHOST_CROSS_ENDIAN_LEGACY
 
 	  If unsure, say "N".
 
+config VHOST_VDMABUF
+	bool "Vhost backend for the Vdmabuf driver"
+	depends on KVM && EVENTFD
+	select VHOST
+	default n
+	help
+	  This driver works in pair with the Virtio Vdmabuf frontend. It can
+	  be used to create a dmabuf using the pages shared by the Guest.
+
 endif
