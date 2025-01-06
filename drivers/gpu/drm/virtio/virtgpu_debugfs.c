@@ -55,6 +55,7 @@ static int virtio_gpu_features(struct seq_file *m, void *data)
 
 	virtio_gpu_add_bool(m, "blob resources", vgdev->has_resource_blob);
 	virtio_gpu_add_bool(m, "context init", vgdev->has_context_init);
+	virtio_gpu_add_bool(m, "backlight", vgdev->has_backlight);
 	virtio_gpu_add_bool(m, "scaling", vgdev->has_scaling);
 	virtio_gpu_add_bool(m, "allow_p2p", vgdev->has_allow_p2p);
 	virtio_gpu_add_bool(m, "multi_plane", vgdev->has_multi_plane);
