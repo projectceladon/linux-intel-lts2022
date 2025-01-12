@@ -24,21 +24,20 @@
  *
  */
 
-#ifndef _LINUX_VIRTIO_VDMABUF_H 
-#define _LINUX_VIRTIO_VDMABUF_H 
+#ifndef _LINUX_VIRTIO_VDMABUF_H
+#define _LINUX_VIRTIO_VDMABUF_H
 
 #include <uapi/linux/virtio_vdmabuf.h>
 #include <linux/hashtable.h>
-#include <linux/kvm_types.h>
 
 struct virtio_vdmabuf_shared_pages {
 	/* cross-VM ref addr for the buffer */
-	gpa_t ref;
+	u64 ref;
 
 	/* page array */
 	struct page **pages;
-	gpa_t **l2refs;
-	gpa_t *l3refs;
+	u64 **l2refs;
+	u64 *l3refs;
 
 	/* data offset in the first page
 	 * and data length in the last page
@@ -48,10 +47,13 @@ struct virtio_vdmabuf_shared_pages {
 
 	/* number of shared pages */
 	int nents;
+
+	u64 offset;
 };
 
 struct virtio_vdmabuf_buf {
 	virtio_vdmabuf_buf_id_t buf_id;
+	struct kref ref;
 
 	struct dma_buf_attachment *attach;
 	struct dma_buf *dma_buf;
@@ -61,9 +63,12 @@ struct virtio_vdmabuf_buf {
 	int fd;
 	uint64_t size;
 
+	bool unexport;
 	/* validity of the buffer */
 	bool valid;
 
+	bool is_export;
+	bool bar_mapped;
 	/* set if the buffer is imported via import_ioctl */
 	bool imported;
 
@@ -74,6 +79,7 @@ struct virtio_vdmabuf_buf {
 
 	struct file *filp;
 	struct hlist_node node;
+	void *data_priv;
 };
 
 struct virtio_vdmabuf_event {
@@ -97,13 +103,17 @@ struct virtio_vdmabuf_info {
 	struct device *dev;
 
 	struct list_head head_vdmabuf_list;
-	struct list_head kvm_instances;
+	struct list_head head_client_list;
+	struct list_head vm_instances;
+	spinlock_t vm_instances_lock;
+	spinlock_t vdmabuf_instances_lock;
 
+	spinlock_t buf_list_lock;
 	DECLARE_HASHTABLE(buf_list, 7);
 
 	void *priv;
 	struct mutex g_mutex;
-	struct notifier_block kvm_notifier;
+	struct notifier_block acrn_notifier;
 };
 
 /* IOCTL definitions
@@ -117,13 +127,10 @@ struct virtio_vdmabuf_ioctl_desc {
 	const char *name;
 };
 
-#define VIRTIO_VDMABUF_IOCTL_DEF(ioctl, _func, _flags)	\
-	[_IOC_NR(ioctl)] = {			\
-			.cmd = ioctl,		\
-			.func = _func,		\
-			.flags = _flags,	\
-			.name = #ioctl		\
-}
+#define VIRTIO_VDMABUF_IOCTL_DEF(ioctl, _func, _flags)                       \
+	[_IOC_NR(ioctl)] = {                                                 \
+		.cmd = ioctl, .func = _func, .flags = _flags, .name = #ioctl \
+	}
 
 #define VIRTIO_VDMABUF_VMID(buf_id) ((((buf_id).id) >> 32) & 0xFFFFFFFF)
 
@@ -190,13 +197,13 @@ struct virtio_vdmabuf_msg {
 enum {
 	VDMABUF_VQ_RECV = 0,
 	VDMABUF_VQ_SEND = 1,
-	VDMABUF_VQ_MAX  = 2,
+	VDMABUF_VQ_MAX = 2,
 };
 
 enum virtio_vdmabuf_cmd {
-	VIRTIO_VDMABUF_CMD_NEED_VMID,
 	VIRTIO_VDMABUF_CMD_EXPORT = 0x10,
-	VIRTIO_VDMABUF_CMD_DMABUF_REL
+	VIRTIO_VDMABUF_CMD_DMABUF_REL,
+	VIRTIO_VDMABUF_CMD_DMABUF_UNEXPORT,
 };
 
 enum virtio_vdmabuf_ops {
@@ -213,18 +220,19 @@ enum virtio_vdmabuf_ops {
 };
 
 /* adding exported/imported vdmabuf info to hash */
-static inline int
-virtio_vdmabuf_add_buf(struct virtio_vdmabuf_info *info,
-                       struct virtio_vdmabuf_buf *new)
+static inline int virtio_vdmabuf_add_buf(struct virtio_vdmabuf_info *info,
+					 struct virtio_vdmabuf_buf *new)
 {
+	unsigned long flags;
+	spin_lock_irqsave(&info->buf_list_lock, flags);
 	hash_add(info->buf_list, &new->node, new->buf_id.id);
+	spin_unlock_irqrestore(&info->buf_list_lock, flags);
 	return 0;
 }
 
 /* comparing two vdmabuf IDs */
-static inline bool
-is_same_buf(virtio_vdmabuf_buf_id_t a,
-            virtio_vdmabuf_buf_id_t b)
+static inline bool is_same_buf(virtio_vdmabuf_buf_id_t a,
+			       virtio_vdmabuf_buf_id_t b)
 {
 	int i;
 
@@ -241,47 +249,80 @@ is_same_buf(virtio_vdmabuf_buf_id_t a,
 }
 
 /* find buf for given vdmabuf ID */
-static inline struct virtio_vdmabuf_buf
-*virtio_vdmabuf_find_buf(struct virtio_vdmabuf_info *info,
-			 virtio_vdmabuf_buf_id_t *buf_id)
+static inline struct virtio_vdmabuf_buf *
+virtio_vdmabuf_find_buf(struct virtio_vdmabuf_info *info,
+			virtio_vdmabuf_buf_id_t *buf_id)
 {
-	struct virtio_vdmabuf_buf *found;
+	struct virtio_vdmabuf_buf *found = NULL;
+	unsigned long flags;
+	spin_lock_irqsave(&info->buf_list_lock, flags);
 
 	hash_for_each_possible(info->buf_list, found, node, buf_id->id)
-		if (is_same_buf(found->buf_id, *buf_id))
-			return found;
+		if (is_same_buf(found->buf_id, *buf_id) && found->valid)
+			break;
+	spin_unlock_irqrestore(&info->buf_list_lock, flags);
 
-	return NULL;
+	return found;
+}
+
+/* find buf for given vdmabuf ID */
+static inline struct virtio_vdmabuf_buf *
+virtio_vdmabuf_find_and_get_buf(struct virtio_vdmabuf_info *info,
+			virtio_vdmabuf_buf_id_t *buf_id)
+{
+	struct virtio_vdmabuf_buf *found = NULL;
+	bool hit = false;
+	unsigned long flags;
+	spin_lock_irqsave(&info->buf_list_lock, flags);
+
+	hash_for_each_possible(info->buf_list, found, node, buf_id->id)
+		if (is_same_buf(found->buf_id, *buf_id) && found->valid) {
+			if (kref_get_unless_zero(&found->ref)) {
+				hit = true;
+				break;
+			}
+		}
+	spin_unlock_irqrestore(&info->buf_list_lock, flags);
+	if (hit)
+		return found;
+	else
+		return NULL;
 }
 
 /* find buf for given fd */
-static inline struct virtio_vdmabuf_buf
-*virtio_vdmabuf_find_buf_fd(struct virtio_vdmabuf_info *info, int fd)
+static inline struct virtio_vdmabuf_buf *
+virtio_vdmabuf_find_buf_fd(struct virtio_vdmabuf_info *info, int fd)
 {
-	struct virtio_vdmabuf_buf *found;
+	struct virtio_vdmabuf_buf *found = NULL;
 	int i;
-
+	unsigned long flags;
+	spin_lock_irqsave(&info->buf_list_lock, flags);
 	hash_for_each(info->buf_list, i, found, node)
 		if (found->fd == fd)
-			return found;
+			break;
+	spin_unlock_irqrestore(&info->buf_list_lock, flags);
 
-	return NULL;
+	return found;
 }
 
 /* delete buf from hash */
-static inline int
-virtio_vdmabuf_del_buf(struct virtio_vdmabuf_info *info,
-                       virtio_vdmabuf_buf_id_t *buf_id)
+static inline int virtio_vdmabuf_del_buf(struct virtio_vdmabuf_info *info,
+					 virtio_vdmabuf_buf_id_t *buf_id)
 {
-	struct virtio_vdmabuf_buf *found;
+	struct virtio_vdmabuf_buf *found = NULL;
+	unsigned long flags;
+	int ret = -1;
+	spin_lock_irqsave(&info->buf_list_lock, flags);
 
-	found = virtio_vdmabuf_find_buf(info, buf_id);
-	if (!found)
-		return -ENOENT;
-
-	hash_del(&found->node);
-
-	return 0;
+	hash_for_each_possible(info->buf_list, found, node, buf_id->id)
+		if (is_same_buf(found->buf_id, *buf_id))
+			break;
+	if (found) {
+		hash_del(&found->node);
+		ret = 0;
+	}
+	spin_unlock_irqrestore(&info->buf_list_lock, flags);
+	return ret;
 }
 
 #endif

@@ -146,7 +146,7 @@ config VIRTIO_INPUT
 	 If unsure, say M.
 
 config VIRTIO_VDMABUF
-	bool "Enables Vdmabuf driver in guest os"
+	tristate "Enables Vdmabuf driver in guest os"
 	default n
 	depends on VIRTIO
 	help

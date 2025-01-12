@@ -364,3 +364,48 @@ void acrn_vm_all_ram_unmap(struct acrn_vm *vm)
 	}
 	mutex_unlock(&vm->regions_mapping_lock);
 }
+
+
+void *acrn_get_hva(struct acrn_vm *vm, u64 gpa)
+{
+	struct vm_memory_mapping *region_mapping;
+	int i;
+	void *hva = NULL;
+
+	mutex_lock(&vm->regions_mapping_lock);
+	for (i = 0; i < vm->regions_mapping_count; i++) {
+		region_mapping = &vm->regions_mapping[i];
+		if (gpa >= region_mapping->user_vm_pa &&
+					gpa < (region_mapping->user_vm_pa + region_mapping->size)) {
+			hva = region_mapping->service_vm_va + (gpa - region_mapping->user_vm_pa);
+			break;
+		}
+	}
+	mutex_unlock(&vm->regions_mapping_lock);
+	return hva;
+}
+EXPORT_SYMBOL_GPL(acrn_get_hva);
+
+struct page *acrn_get_page(struct acrn_vm *vm, u64 gpa)
+{
+        struct vm_memory_mapping *region_mapping;
+        int i, j;
+        u64 user_vm_pa;
+        struct page *page_hit = NULL;
+
+        mutex_lock(&vm->regions_mapping_lock);
+        for (i = 0; i < vm->regions_mapping_count; i++) {
+                region_mapping = &vm->regions_mapping[i];
+                user_vm_pa = region_mapping->user_vm_pa;
+                for(j = 0; j < region_mapping->npages; j++) {
+                        if (gpa >= user_vm_pa && gpa < user_vm_pa + PAGE_SIZE) {
+                                page_hit = region_mapping->pages[j];
+                                break;
+                        }
+                        user_vm_pa = user_vm_pa + PAGE_SIZE;
+                }
+        }
+        mutex_unlock(&vm->regions_mapping_lock);
+        return page_hit;
+}
+EXPORT_SYMBOL_GPL(acrn_get_page);

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: (MIT OR GPL-2.0)
+/* SPDX-License-Identifier: ((GPL-2.0 WITH Linux-syscall-note) OR MIT) */
 
 /*
  * Copyright © 2021 Intel Corporation
@@ -28,6 +28,7 @@
 #define _UAPI_LINUX_VIRTIO_VDMABUF_H
 
 #define MAX_SIZE_PRIV_DATA 192
+#define MAX_VM_NAME_LEN 16
 
 typedef struct {
 	__u64 id;
@@ -50,8 +51,7 @@ struct virtio_vdmabuf_e_data {
 
 #define VIRTIO_VDMABUF_IOCTL_IMPORT \
 _IOC(_IOC_NONE, 'G', 2, sizeof(struct virtio_vdmabuf_import))
-#define VIRTIO_VDMABUF_IOCTL_RELEASE \
-_IOC(_IOC_NONE, 'G', 3, sizeof(struct virtio_vdmabuf_import))
+
 struct virtio_vdmabuf_import {
 	/* IN parameters */
 	/* vdmabuf id to be imported */
@@ -84,4 +84,62 @@ struct virtio_vdmabuf_alloc {
 	int fd;
 };
 
+#define VHOST_VDMABUF_SET_ID \
+_IOC(_IOC_NONE, 'G', 6, sizeof(struct vhost_vdmabuf_set))
+struct vhost_vdmabuf_set {
+	/* IN parameters */
+	uint64_t vmid;
+	/* IN parameters */
+	char name[MAX_VM_NAME_LEN];
+};
+
+#define VIRTIO_VDMABUF_IOCTL_ATTACH \
+_IOC(_IOC_NONE, 'G', 7, sizeof(struct virtio_vdmabuf_attach))
+struct virtio_vdmabuf_attach {
+	/* IN parameters */
+	char name[MAX_VM_NAME_LEN];
+};
+
+#define VDMABUF_PRODUCER 0x1
+#define VDMABUF_CONSUMER 0x2
+
+#define VIRTIO_VDMABUF_IOCTL_ROLE \
+_IOC(_IOC_NONE, 'G', 3, sizeof(struct virtio_vdmabuf_role))
+struct virtio_vdmabuf_role {
+	/* IN parameters */
+	int role;
+};
+
+#define VIRTIO_VDMABUF_IOCTL_SHARED_MEM \
+_IOC(_IOC_NONE, 'G', 8, sizeof(struct virtio_vdmabuf_smem))
+struct virtio_vdmabuf_smem {
+	/* IN parameters */
+	uint64_t hva;
+	uint64_t gpa;
+	uint64_t size;
+};
+
+#define VIRTIO_VDMABUF_IOCTL_UNEXPORT \
+_IOC(_IOC_NONE, 'G', 9, sizeof(struct virtio_vdmabuf_unexport))
+struct virtio_vdmabuf_unexport {
+	/* IN parameters */
+	virtio_vdmabuf_buf_id_t buf_id;
+};
+
+#define VIRTIO_VDMABUF_IOCTL_QUERY_BUFINFO \
+_IOC(_IOC_NONE, 'G', 10, sizeof(struct virtio_vdmabuf_query_bufinfo))
+struct virtio_vdmabuf_query_bufinfo {
+	/* IN parameters */
+	virtio_vdmabuf_buf_id_t buf_id;
+	int subcmd;
+	/* OUT parameters */
+	unsigned long info;
+};
+
+/* DMABUF query */
+enum virtio_vdmabuf_query_cmd {
+	VIRTIO_VDMABUF_QUERY_SIZE = 0x10,
+	VIRTIO_VDMABUF_QUERY_PRIV_INFO_SIZE,
+	VIRTIO_VDMABUF_QUERY_PRIV_INFO,
+};
 #endif

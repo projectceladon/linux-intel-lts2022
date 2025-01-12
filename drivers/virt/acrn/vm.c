@@ -22,6 +22,20 @@ LIST_HEAD(acrn_vm_list);
  */
 DEFINE_RWLOCK(acrn_vm_list_lock);
 
+static struct blocking_notifier_head acrn_vm_notifier;
+
+int acrn_vm_register_notifier(struct notifier_block *nb)
+{
+       return blocking_notifier_chain_register(&acrn_vm_notifier, nb);
+}
+EXPORT_SYMBOL_GPL(acrn_vm_register_notifier);
+
+int acrn_vm_unregister_notifier(struct notifier_block *nb)
+{
+       return blocking_notifier_chain_unregister(&acrn_vm_notifier, nb);
+}
+EXPORT_SYMBOL_GPL(acrn_vm_unregister_notifier);
+
 struct acrn_vm *acrn_vm_create(struct acrn_vm *vm,
 			       struct acrn_vm_creation *vm_param)
 {
@@ -52,6 +66,8 @@ struct acrn_vm *acrn_vm_create(struct acrn_vm *vm,
 
 	acrn_ioeventfd_init(vm);
 	acrn_irqfd_init(vm);
+	blocking_notifier_call_chain(&acrn_vm_notifier,
+										ACRN_EVENT_CREATE_VM, vm);
 	dev_dbg(acrn_dev.this_device, "VM %u created.\n", vm->vmid);
 	return vm;
 }
@@ -63,7 +79,8 @@ int acrn_vm_destroy(struct acrn_vm *vm)
 	if (vm->vmid == ACRN_INVALID_VMID ||
 	    test_and_set_bit(ACRN_VM_FLAG_DESTROYED, &vm->flags))
 		return 0;
-
+	blocking_notifier_call_chain(&acrn_vm_notifier,
+									ACRN_EVENT_DESTROY_VM, vm);
 	ret = hcall_destroy_vm(vm->vmid);
 	if (ret < 0) {
 		dev_err(acrn_dev.this_device,
