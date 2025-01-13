@@ -552,7 +552,7 @@ static int vhost_vdmabuf_dmabuf_mmap(struct dma_buf *dmabuf,
 	if (!imp->pages_info)
 		return -EINVAL;
 
-	vma->vm_flags |= VM_DONTEXPAND | VM_DONTDUMP;
+	vm_flags_set(vma, VM_DONTEXPAND | VM_DONTDUMP);
 
 	uaddr = vma->vm_start;
 	for (i = 0; i < imp->pages_info->nents; i++) {

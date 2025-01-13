@@ -642,7 +642,7 @@ static int virtio_vdmabuf_mmap_dmabuf(struct dma_buf *dmabuf,
 	if (!exp_buf->pages_info)
 		return -EINVAL;
 
-	vma->vm_flags |= VM_DONTEXPAND | VM_DONTDUMP;
+	vm_flags_set(vma, VM_DONTEXPAND | VM_DONTDUMP);
 
 	uaddr = vma->vm_start;
 	for (i = 0; i < exp_buf->pages_info->nents; i++) {
