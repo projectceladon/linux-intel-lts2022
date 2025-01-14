@@ -949,6 +949,9 @@ static int virtio_camera_setup_vnode(struct virtio_device *vdev,
 			vnode = &vcam->virtual_cameras[i].vnodes[0];
 			video_set_drvdata(&vnode->vdev, vnode);
 			mutex_init(&vnode->video_lock);
+
+			snprintf(vnode->vdev.name, sizeof(vnode->vdev.name), "vCamera_%d", i);
+
 			vnode->vdev.queue = &vnode->vb_queue;
 			vnode->vdev.lock = &vnode->video_lock,
 			vnode->vdev.fops = &vcam_v4l2_fops,
@@ -961,7 +964,7 @@ static int virtio_camera_setup_vnode(struct virtio_device *vdev,
 			vnode->vb_queue.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 			vnode->vb_queue.buf_struct_size = sizeof(struct virtio_camera_buffer);
 			vnode->vb_queue.timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
-			vnode->vb_queue.io_modes = VB2_MMAP | VB2_DMABUF;
+			vnode->vb_queue.io_modes = VB2_MMAP | VB2_DMABUF | VB2_USERPTR;
 			vnode->vb_queue.mem_ops = &vb2_dma_sg_memops;
 			vnode->vb_queue.lock = &vnode->video_lock;
 			vnode->vb_queue.min_buffers_needed = 1;
