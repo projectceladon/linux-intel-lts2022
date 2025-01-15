@@ -1958,7 +1958,7 @@ int uvc_register_video_device(struct uvc_device *dev,
 	 */
 	video_set_drvdata(vdev, stream);
 
-	ret = video_register_device(vdev, VFL_TYPE_VIDEO, -1);
+	ret = video_register_device(vdev, VFL_TYPE_VIDEO, 50);
 	if (ret < 0) {
 		dev_err(&stream->intf->dev,
 			"Failed to register %s device (%d).\n",
