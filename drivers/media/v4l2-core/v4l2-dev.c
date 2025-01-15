@@ -907,6 +907,10 @@ int __video_register_device(struct video_device *vdev,
 
 	/* Part 1: check device type */
 	switch (type) {
+	case VFL_TYPE_UVC:
+		name_base = "uvcvideo";
+		type = VFL_TYPE_VIDEO;
+		break;
 	case VFL_TYPE_VIDEO:
 		name_base = "video";
 		break;
@@ -931,6 +935,7 @@ int __video_register_device(struct video_device *vdev,
 		       __func__, type);
 		return -EINVAL;
 	}
+	pr_err("video base name:%s\n", name_base);
 
 	vdev->vfl_type = type;
 	vdev->cdev = NULL;

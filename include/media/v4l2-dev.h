@@ -40,6 +40,7 @@ enum vfl_devnode_type {
 	VFL_TYPE_SUBDEV,
 	VFL_TYPE_SDR,
 	VFL_TYPE_TOUCH,
+	VFL_TYPE_UVC,
 	VFL_TYPE_MAX /* Shall be the last one */
 };
 
