@@ -346,7 +346,7 @@ static int vcam_enum_framesizes(struct file *file, void *fh,
 
 	err = vcam_vq_request(vnode, vcam_req, NULL, 0, false);
 	if (err) {
-		pr_err("virtio-camera: vnode%d enum_size failed, err response.\n", vnode->idx);
+		pr_debug("virtio-camera: vnode%d enum_size failed, err response.\n", vnode->idx);
 		goto err_free;
 	}
 
@@ -398,7 +398,7 @@ static int vcam_enum_frameintervals(struct file *file, void *fh,
 	err = vcam_vq_request(vnode, vcam_req, NULL, 0, false);
 	sz = &vcam_req->resp.u.format.size;
 	if (err) {
-		pr_err("virtio-camera: vnode%d enum_interval failed, err response.\n", vnode->idx);
+		pr_debug("virtio-camera: vnode%d enum_interval failed, err response.\n", vnode->idx);
 		goto err_free;
 	}
 
@@ -982,7 +982,7 @@ static int virtio_camera_setup_vnode(struct virtio_device *vdev,
 
 			vnode->ctr_vqx = &vcam->vqs[vq_idx++];
 
-			err = video_register_device(&vnode->vdev, VFL_TYPE_VIDEO, -1);
+			err = video_register_device(&vnode->vdev, VFL_TYPE_VIRTCAM, -1);
 
 			if (err) {
 				virtio_camera_unregister_devs(vcam, i, j-1);
