@@ -1042,6 +1042,7 @@ static void gfx_out_of_tree_load(struct device *dev)
 	gfx_load_module(buf, fw->size, NULL);
 	DRM_INFO("compat loaded\n");
 
+/*
 	err = firmware_request_nowarn(&fw, "i915/intel_vsec.ko", dev);
 	if (err) {
 		DRM_ERROR("intel_vsec load failed: %d\n", err);
@@ -1051,6 +1052,7 @@ static void gfx_out_of_tree_load(struct device *dev)
 	memcpy(buf, fw->data, fw->size);
 	gfx_load_module(buf, fw->size, NULL);
 	DRM_INFO("intel_vsec loaded\n");
+*/
 
 	err = firmware_request_nowarn(&fw, "i915/i915_ag.ko", dev);
 	if (err) {
