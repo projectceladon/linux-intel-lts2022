@@ -1061,7 +1061,7 @@ static void gfx_out_of_tree_load(struct device *dev)
 	}
 	buf = __vmalloc((unsigned long)fw->size, GFP_KERNEL | __GFP_NOWARN);
 	memcpy(buf, fw->data, fw->size);
-	gfx_load_module(buf, fw->size, "nuclear_pageflip=1 enable_guc=0x7 max_vfs=7 modeset=1 fastboot=1");
+	gfx_load_module(buf, fw->size, "enable_guc=0x3 max_vfs=7 modeset=1 fastboot=1");
 	DRM_INFO("i915_ag loaded\n");
 }
 
