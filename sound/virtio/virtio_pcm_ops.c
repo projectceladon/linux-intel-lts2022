@@ -334,7 +334,7 @@ static int virtsnd_pcm_trigger(struct snd_pcm_substream *substream, int command)
 	case SNDRV_PCM_TRIGGER_START:
 	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
 		queue = virtsnd_pcm_queue(vss);
-
+		printk("virtsnd_pcm_trigger, start \n");
 		spin_lock_irqsave(&queue->lock, flags);
 		spin_lock(&vss->lock);
 		if (vss->direction == SNDRV_PCM_STREAM_CAPTURE)
@@ -343,6 +343,7 @@ static int virtsnd_pcm_trigger(struct snd_pcm_substream *substream, int command)
 			vss->xfer_enabled = true;
 		spin_unlock(&vss->lock);
 		spin_unlock_irqrestore(&queue->lock, flags);
+		printk("virtsnd_pcm_trigger, finish \n");
 		if (rc)
 			return rc;
 
