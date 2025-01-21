@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
-// Copyright (C) 2013 - 2022 Intel Corporation
+// Copyright (C) 2013 - 2024 Intel Corporation
 
 #include <linux/acpi.h>
 #include <linux/debugfs.h>
@@ -14,6 +14,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/timer.h>
 #include <linux/sched.h>
+#include <linux/version.h>
 
 #include "ipu.h"
 #include "ipu-buttress.h"
@@ -101,7 +102,7 @@ static struct ipu_bus_device *ipu_isys_init(struct pci_dev *pdev,
 	}
 #if IS_ENABLED(CONFIG_INTEL_IPU6_ACPI)
 	if (!spdata) {
-		dev_err(&pdev->dev, "No subdevice info provided");
+		dev_dbg(&pdev->dev, "No subdevice info provided");
 		ipu_get_acpi_devices(isys, &isys->dev, &acpi_pdata, NULL,
 				     isys_init_acpi_add_device);
 		pdata->spdata = acpi_pdata;
@@ -366,8 +367,9 @@ static int ipu_pci_config_setup(struct pci_dev *dev)
 	pci_write_config_word(dev, PCI_COMMAND, pci_command);
 
 	/* disable IPU6 PCI ATS on mtl ES2 */
-	if (ipu_ver == IPU_VER_6EP_MTL && boot_cpu_data.x86_stepping == 0x2 &&
-	    pci_ats_supported(dev))
+	if ((boot_cpu_data.x86_model == 0xac ||
+	     boot_cpu_data.x86_model == 0xaa) &&
+	    boot_cpu_data.x86_stepping == 0x2 && pci_ats_supported(dev))
 		pci_disable_ats(dev);
 
 	/* no msi pci capability for IPU6EP */
@@ -456,8 +458,8 @@ static inline int match_spdata(struct ipu_isys_subdev_info *sd,
 	return 1;
 }
 
-void fixup_spdata(const void *spdata_rep,
-		struct ipu_isys_subdev_pdata *spdata)
+static void fixup_spdata(const void *spdata_rep,
+			 struct ipu_isys_subdev_pdata *spdata)
 {
 	const struct ipu_spdata_rep *rep = spdata_rep;
 	struct ipu_isys_subdev_info **subdevs, *sd_info;
@@ -551,24 +553,31 @@ static int ipu_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	case IPU6_PCI_ID:
 		ipu_ver = IPU_VER_6;
 		isp->cpd_fw_name = IPU6_FIRMWARE_NAME;
+		isp->cpd_fw_name_new = IPU6_FIRMWARE_NAME_NEW;
 		break;
 	case IPU6SE_PCI_ID:
 		ipu_ver = IPU_VER_6SE;
 		isp->cpd_fw_name = IPU6SE_FIRMWARE_NAME;
+		isp->cpd_fw_name_new = IPU6SE_FIRMWARE_NAME_NEW;
 		break;
 	case IPU6EP_ADL_P_PCI_ID:
 	case IPU6EP_RPL_P_PCI_ID:
 		ipu_ver = IPU_VER_6EP;
 		isp->cpd_fw_name = is_es ? IPU6EPES_FIRMWARE_NAME : IPU6EP_FIRMWARE_NAME;
+		isp->cpd_fw_name_new = is_es ? IPU6EPES_FIRMWARE_NAME_NEW
+					     : IPU6EP_FIRMWARE_NAME_NEW;
 		break;
 	case IPU6EP_ADL_N_PCI_ID:
 		ipu_ver = IPU_VER_6EP;
 		isp->cpd_fw_name = IPU6EPADLN_FIRMWARE_NAME;
+		isp->cpd_fw_name_new = IPU6EPADLN_FIRMWARE_NAME_NEW;
 		break;
 	case IPU6EP_MTL_PCI_ID:
 		ipu_ver = IPU_VER_6EP_MTL;
 		isp->cpd_fw_name = is_es ? IPU6EPMTLES_FIRMWARE_NAME
 					 : IPU6EPMTL_FIRMWARE_NAME;
+		isp->cpd_fw_name_new = is_es ? IPU6EPMTLES_FIRMWARE_NAME_NEW
+					     : IPU6EPMTL_FIRMWARE_NAME_NEW;
 		break;
 	default:
 		WARN(1, "Unsupported IPU device");
@@ -608,9 +617,16 @@ static int ipu_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (rval)
 		return rval;
 
-	dev_info(&pdev->dev, "cpd file name: %s\n", isp->cpd_fw_name);
-
+	dev_dbg(&pdev->dev, "cpd file name: %s\n", isp->cpd_fw_name);
 	rval = request_cpd_fw(&isp->cpd_fw, isp->cpd_fw_name, &pdev->dev);
+	if (rval == -ENOENT) {
+		/* Try again with new FW path */
+		dev_dbg(&pdev->dev, "cpd file name: %s\n",
+			isp->cpd_fw_name_new);
+		rval = request_cpd_fw(&isp->cpd_fw, isp->cpd_fw_name_new,
+				      &pdev->dev);
+	}
+
 	if (rval) {
 		dev_err(&isp->pdev->dev, "Requesting signed firmware failed\n");
 		goto buttress_exit;
@@ -672,7 +688,7 @@ static int ipu_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		do_div(val, BUTTRESS_IS_FREQ_STEP);
 		isys_ctrl->divisor = val;
 		dev_info(&isp->pdev->dev,
-			 "adusted isys freq from input (%d) and set (%d)\n",
+			 "set isys freq as (%d), actually set (%d)\n",
 			 isys_freq_override,
 			 isys_ctrl->divisor * BUTTRESS_IS_FREQ_STEP);
 	}
@@ -817,20 +833,17 @@ static void ipu_pci_remove(struct pci_dev *pdev)
 	isp->pkg_dir_dma_addr = 0;
 	isp->pkg_dir_size = 0;
 
+	ipu_mmu_cleanup(isp->psys->mmu);
+	ipu_mmu_cleanup(isp->isys->mmu);
+
 	ipu_bus_del_devices(pdev);
 
 	pm_runtime_forbid(&pdev->dev);
 	pm_runtime_get_noresume(&pdev->dev);
 
-	pci_release_regions(pdev);
-	pci_disable_device(pdev);
-
 	ipu_buttress_exit(isp);
 
 	release_firmware(isp->cpd_fw);
-
-	ipu_mmu_cleanup(isp->psys->mmu);
-	ipu_mmu_cleanup(isp->isys->mmu);
 }
 
 static void ipu_pci_reset_prepare(struct pci_dev *pdev)
@@ -856,8 +869,6 @@ static void ipu_pci_reset_done(struct pci_dev *pdev)
 
 	dev_warn(&pdev->dev, "FLR completed\n");
 }
-
-#ifdef CONFIG_PM
 
 /*
  * PCI base driver code requires driver to provide these to enable
@@ -939,11 +950,6 @@ static const struct dev_pm_ops ipu_pm_ops = {
 			       NULL)
 };
 
-#define IPU_PM (&ipu_pm_ops)
-#else
-#define IPU_PM NULL
-#endif
-
 static const struct pci_device_id ipu_pci_tbl[] = {
 	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6_PCI_ID)},
 	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6SE_PCI_ID)},
@@ -966,7 +972,7 @@ static struct pci_driver ipu_pci_driver = {
 	.probe = ipu_pci_probe,
 	.remove = ipu_pci_remove,
 	.driver = {
-		   .pm = IPU_PM,
+		   .pm = &ipu_pm_ops,
 		   },
 	.err_handler = &pci_err_handlers,
 };

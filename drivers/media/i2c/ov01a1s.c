@@ -17,6 +17,10 @@
 #elif IS_ENABLED(CONFIG_POWER_CTRL_LOGIC)
 #include "power_ctrl_logic.h"
 #endif
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0) && \
+    IS_ENABLED(CONFIG_INTEL_VSC)
+#include <linux/vsc.h>
+#endif
 
 #define OV01A1S_LINK_FREQ_400MHZ	400000000ULL
 #define OV01A1S_SCLK			40000000LL
@@ -299,6 +303,14 @@ struct ov01a1s {
 	struct v4l2_ctrl *vblank;
 	struct v4l2_ctrl *hblank;
 	struct v4l2_ctrl *exposure;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0) && \
+    IS_ENABLED(CONFIG_INTEL_VSC)
+	struct v4l2_ctrl *privacy_status;
+
+	/* VSC settings */
+	struct vsc_mipi_config conf;
+	struct vsc_camera_status status;
+#endif
 
 	/* Current mode */
 	const struct ov01a1s_mode *cur_mode;
@@ -324,6 +336,10 @@ struct ov01a1s {
 		OV01A1S_USE_DEFAULT = 0,
 #if IS_ENABLED(CONFIG_INTEL_SKL_INT3472) || IS_ENABLED(CONFIG_POWER_CTRL_LOGIC)
 		OV01A1S_USE_INT3472 = 1,
+#endif
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0) && \
+    IS_ENABLED(CONFIG_INTEL_VSC)
+		OV01A1S_USE_INTEL_VSC = 2,
 #endif
 	} power_type;
 
@@ -492,6 +508,13 @@ static int ov01a1s_set_ctrl(struct v4l2_ctrl *ctrl)
 		ret = ov01a1s_test_pattern(ov01a1s, ctrl->val);
 		break;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0) && \
+    IS_ENABLED(CONFIG_INTEL_VSC)
+	case V4L2_CID_PRIVACY:
+		dev_dbg(&client->dev, "set privacy to %d", ctrl->val);
+		break;
+
+#endif
 	default:
 		ret = -EINVAL;
 		break;
@@ -516,7 +539,12 @@ static int ov01a1s_init_controls(struct ov01a1s *ov01a1s)
 	int ret = 0;
 
 	ctrl_hdlr = &ov01a1s->ctrl_handler;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0) && \
+    IS_ENABLED(CONFIG_INTEL_VSC)
+	ret = v4l2_ctrl_handler_init(ctrl_hdlr, 9);
+#else
 	ret = v4l2_ctrl_handler_init(ctrl_hdlr, 8);
+#endif
 	if (ret)
 		return ret;
 
@@ -549,6 +577,13 @@ static int ov01a1s_init_controls(struct ov01a1s *ov01a1s)
 					    1, h_blank);
 	if (ov01a1s->hblank)
 		ov01a1s->hblank->flags |= V4L2_CTRL_FLAG_READ_ONLY;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0) && \
+    IS_ENABLED(CONFIG_INTEL_VSC)
+	ov01a1s->privacy_status = v4l2_ctrl_new_std(ctrl_hdlr,
+						    &ov01a1s_ctrl_ops,
+						    V4L2_CID_PRIVACY,
+						    0, 1, 1, 0);
+#endif
 
 	v4l2_ctrl_new_std(ctrl_hdlr, &ov01a1s_ctrl_ops, V4L2_CID_ANALOGUE_GAIN,
 			  OV01A1S_ANAL_GAIN_MIN, OV01A1S_ANAL_GAIN_MAX,
@@ -584,6 +619,17 @@ static void ov01a1s_update_pad_format(const struct ov01a1s_mode *mode,
 	fmt->field = V4L2_FIELD_NONE;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0) && \
+    IS_ENABLED(CONFIG_INTEL_VSC)
+static void ov01a1s_vsc_privacy_callback(void *handle,
+				       enum vsc_privacy_status status)
+{
+	struct ov01a1s *ov01a1s = handle;
+
+	v4l2_ctrl_s_ctrl(ov01a1s->privacy_status, !status);
+}
+
+#endif
 static int ov01a1s_start_streaming(struct ov01a1s *ov01a1s)
 {
 	struct i2c_client *client = ov01a1s->client;
@@ -683,6 +729,14 @@ static int ov01a1s_power_off(struct device *dev)
 	if (ov01a1s->power_type == OV01A1S_USE_INT3472)
 		ret = power_ctrl_logic_set_power(0);
 #endif
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0) && \
+    IS_ENABLED(CONFIG_INTEL_VSC)
+	if (ov01a1s->power_type == OV01A1S_USE_INTEL_VSC) {
+		ret = vsc_release_camera_sensor(&ov01a1s->status);
+		if (ret && ret != -EAGAIN)
+			dev_err(dev, "Release VSC failed");
+	}
+#endif
 
 	return ret;
 }
@@ -709,6 +763,20 @@ static int ov01a1s_power_on(struct device *dev)
 #elif IS_ENABLED(CONFIG_POWER_CTRL_LOGIC)
 	if (ov01a1s->power_type == OV01A1S_USE_INT3472)
 		ret = power_ctrl_logic_set_power(1);
+#endif
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0) && \
+    IS_ENABLED(CONFIG_INTEL_VSC)
+	if (ov01a1s->power_type == OV01A1S_USE_INTEL_VSC) {
+		ret = vsc_acquire_camera_sensor(&ov01a1s->conf,
+						ov01a1s_vsc_privacy_callback,
+						ov01a1s, &ov01a1s->status);
+		if (ret && ret != -EAGAIN) {
+			dev_err(dev, "Acquire VSC failed");
+			return ret;
+		}
+		__v4l2_ctrl_s_ctrl(ov01a1s->privacy_status,
+				   !(ov01a1s->status.status));
+	}
 #endif
 
 	return ret;
@@ -752,7 +820,11 @@ exit:
 }
 
 static int ov01a1s_set_format(struct v4l2_subdev *sd,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 14, 0)
+			      struct v4l2_subdev_pad_config *cfg,
+#else
 			      struct v4l2_subdev_state *sd_state,
+#endif
 			      struct v4l2_subdev_format *fmt)
 {
 	struct ov01a1s *ov01a1s = to_ov01a1s(sd);
@@ -767,7 +839,13 @@ static int ov01a1s_set_format(struct v4l2_subdev *sd,
 	mutex_lock(&ov01a1s->mutex);
 	ov01a1s_update_pad_format(mode, &fmt->format);
 	if (fmt->which == V4L2_SUBDEV_FORMAT_TRY) {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 14, 0)
+		*v4l2_subdev_get_try_format(sd, cfg, fmt->pad) = fmt->format;
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(6, 8, 0)
 		*v4l2_subdev_get_try_format(sd, sd_state, fmt->pad) = fmt->format;
+#else
+		*v4l2_subdev_state_get_format(sd_state, fmt->pad) = fmt->format;
+#endif
 	} else {
 		ov01a1s->cur_mode = mode;
 		__v4l2_ctrl_s_ctrl(ov01a1s->link_freq, mode->link_freq_index);
@@ -790,15 +868,27 @@ static int ov01a1s_set_format(struct v4l2_subdev *sd,
 }
 
 static int ov01a1s_get_format(struct v4l2_subdev *sd,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 14, 0)
+			      struct v4l2_subdev_pad_config *cfg,
+#else
 			      struct v4l2_subdev_state *sd_state,
+#endif
 			      struct v4l2_subdev_format *fmt)
 {
 	struct ov01a1s *ov01a1s = to_ov01a1s(sd);
 
 	mutex_lock(&ov01a1s->mutex);
 	if (fmt->which == V4L2_SUBDEV_FORMAT_TRY)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 14, 0)
+		fmt->format = *v4l2_subdev_get_try_format(&ov01a1s->sd, cfg,
+							  fmt->pad);
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(6, 8, 0)
 		fmt->format = *v4l2_subdev_get_try_format(&ov01a1s->sd,
 							  sd_state, fmt->pad);
+#else
+		fmt->format = *v4l2_subdev_state_get_format(
+							  sd_state, fmt->pad);
+#endif
 	else
 		ov01a1s_update_pad_format(ov01a1s->cur_mode, &fmt->format);
 
@@ -808,7 +898,11 @@ static int ov01a1s_get_format(struct v4l2_subdev *sd,
 }
 
 static int ov01a1s_enum_mbus_code(struct v4l2_subdev *sd,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 14, 0)
+				  struct v4l2_subdev_pad_config *cfg,
+#else
 				  struct v4l2_subdev_state *sd_state,
+#endif
 				  struct v4l2_subdev_mbus_code_enum *code)
 {
 	if (code->index > 0)
@@ -820,7 +914,11 @@ static int ov01a1s_enum_mbus_code(struct v4l2_subdev *sd,
 }
 
 static int ov01a1s_enum_frame_size(struct v4l2_subdev *sd,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 14, 0)
+				   struct v4l2_subdev_pad_config *cfg,
+#else
 				   struct v4l2_subdev_state *sd_state,
+#endif
 				   struct v4l2_subdev_frame_size_enum *fse)
 {
 	if (fse->index >= ARRAY_SIZE(supported_modes))
@@ -842,8 +940,16 @@ static int ov01a1s_open(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 	struct ov01a1s *ov01a1s = to_ov01a1s(sd);
 
 	mutex_lock(&ov01a1s->mutex);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 14, 0)
+	ov01a1s_update_pad_format(&supported_modes[0],
+				  v4l2_subdev_get_try_format(sd, fh->pad, 0));
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(6, 8, 0)
 	ov01a1s_update_pad_format(&supported_modes[0],
 				  v4l2_subdev_get_try_format(sd, fh->state, 0));
+#else
+	ov01a1s_update_pad_format(&supported_modes[0],
+				  v4l2_subdev_state_get_format(fh->state, 0));
+#endif
 	mutex_unlock(&ov01a1s->mutex);
 
 	return 0;
@@ -892,7 +998,75 @@ static int ov01a1s_identify_module(struct ov01a1s *ov01a1s)
 	return 0;
 }
 
+static int ov01a1s_check_hwcfg(struct device *dev)
+{
+	struct v4l2_fwnode_endpoint bus_cfg = {
+		.bus_type = V4L2_MBUS_CSI2_DPHY
+	};
+	struct fwnode_handle *ep;
+	struct fwnode_handle *fwnode = dev_fwnode(dev);
+	unsigned int i, j;
+	int ret;
+	u32 ext_clk;
+
+	if (!fwnode)
+		return -ENXIO;
+
+	ep = fwnode_graph_get_next_endpoint(fwnode, NULL);
+	if (!ep)
+		return -EPROBE_DEFER;
+
+	ret = fwnode_property_read_u32(dev_fwnode(dev), "clock-frequency",
+				       &ext_clk);
+	if (ret) {
+		dev_err(dev, "can't get clock frequency");
+		return ret;
+	}
+
+	ret = v4l2_fwnode_endpoint_alloc_parse(ep, &bus_cfg);
+	fwnode_handle_put(ep);
+	if (ret)
+		return ret;
+
+	if (bus_cfg.bus.mipi_csi2.num_data_lanes != OV01A1S_DATA_LANES) {
+		dev_err(dev, "number of CSI2 data lanes %d is not supported",
+			bus_cfg.bus.mipi_csi2.num_data_lanes);
+		ret = -EINVAL;
+		goto out_err;
+	}
+
+	if (!bus_cfg.nr_of_link_frequencies) {
+		dev_err(dev, "no link frequencies defined");
+		ret = -EINVAL;
+		goto out_err;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(link_freq_menu_items); i++) {
+		for (j = 0; j < bus_cfg.nr_of_link_frequencies; j++) {
+			if (link_freq_menu_items[i] ==
+				bus_cfg.link_frequencies[j])
+				break;
+		}
+
+		if (j == bus_cfg.nr_of_link_frequencies) {
+			dev_err(dev, "no link frequency %lld supported",
+				link_freq_menu_items[i]);
+			ret = -EINVAL;
+			goto out_err;
+		}
+	}
+
+out_err:
+	v4l2_fwnode_endpoint_free(&bus_cfg);
+
+	return ret;
+}
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0)
+static int ov01a1s_remove(struct i2c_client *client)
+#else
 static void ov01a1s_remove(struct i2c_client *client)
+#endif
 {
 	struct v4l2_subdev *sd = i2c_get_clientdata(client);
 	struct ov01a1s *ov01a1s = to_ov01a1s(sd);
@@ -903,6 +1077,9 @@ static void ov01a1s_remove(struct i2c_client *client)
 	pm_runtime_disable(&client->dev);
 	mutex_destroy(&ov01a1s->mutex);
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0)
+	return 0;
+#endif
 }
 
 #if IS_ENABLED(CONFIG_INTEL_SKL_INT3472)
@@ -948,6 +1125,19 @@ static int ov01a1s_parse_power(struct ov01a1s *ov01a1s)
 {
 	int ret = 0;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0) && \
+    IS_ENABLED(CONFIG_INTEL_VSC)
+	ov01a1s->conf.lane_num = OV01A1S_DATA_LANES;
+	/* frequency unit 100k */
+	ov01a1s->conf.freq = OV01A1S_LINK_FREQ_400MHZ / 100000;
+	ret = vsc_acquire_camera_sensor(&ov01a1s->conf, NULL, NULL, &ov01a1s->status);
+	if (!ret) {
+		ov01a1s->power_type = OV01A1S_USE_INTEL_VSC;
+		return 0;
+	} else if (ret != -EAGAIN) {
+		return ret;
+	}
+#endif
 #if IS_ENABLED(CONFIG_INTEL_SKL_INT3472)
 	ret = ov01a1s_parse_gpio(ov01a1s);
 #elif IS_ENABLED(CONFIG_POWER_CTRL_LOGIC)
@@ -969,6 +1159,13 @@ static int ov01a1s_probe(struct i2c_client *client)
 {
 	struct ov01a1s *ov01a1s;
 	int ret = 0;
+
+	/* Check HW config */
+	ret = ov01a1s_check_hwcfg(&client->dev);
+	if (ret) {
+		dev_err(&client->dev, "failed to check hwcfg: %d", ret);
+		return ret;
+	}
 
 	ov01a1s = devm_kzalloc(&client->dev, sizeof(*ov01a1s), GFP_KERNEL);
 	if (!ov01a1s)
@@ -1010,7 +1207,11 @@ static int ov01a1s_probe(struct i2c_client *client)
 		goto probe_error_v4l2_ctrl_handler_free;
 	}
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 13, 0)
+	ret = v4l2_async_register_subdev_sensor_common(&ov01a1s->sd);
+#else
 	ret = v4l2_async_register_subdev_sensor(&ov01a1s->sd);
+#endif
 	if (ret < 0) {
 		dev_err(&client->dev, "failed to register V4L2 subdev: %d",
 			ret);
@@ -1060,7 +1261,11 @@ static struct i2c_driver ov01a1s_i2c_driver = {
 		.pm = &ov01a1s_pm_ops,
 		.acpi_match_table = ACPI_PTR(ov01a1s_acpi_ids),
 	},
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
 	.probe_new = ov01a1s_probe,
+#else
+	.probe = ov01a1s_probe,
+#endif
 	.remove = ov01a1s_remove,
 };
 

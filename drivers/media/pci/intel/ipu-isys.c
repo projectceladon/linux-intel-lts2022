@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
-// Copyright (C) 2013 - 2023 Intel Corporation
+// Copyright (C) 2013 - 2024 Intel Corporation
 
+#include <linux/acpi.h>
 #include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/device.h>
@@ -36,6 +37,10 @@
 #include "ipu-buttress.h"
 #include "ipu-platform.h"
 #include "ipu-platform-buttress-regs.h"
+
+int vnode_num = NR_OF_CSI2_BE_SOC_STREAMS;
+module_param(vnode_num, int, 0440);
+MODULE_PARM_DESC(vnode_num, "override vnode_num default value is 16");
 
 #define ISYS_PM_QOS_VALUE	300
 #if IS_ENABLED(CONFIG_VIDEO_INTEL_IPU_USE_PLATFORMDATA)
@@ -344,6 +349,10 @@ static int isys_register_subdevices(struct ipu_isys *isys)
 		isys->isr_csi2_bits |= IPU_ISYS_UNISPART_IRQ_CSI2(i);
 	}
 
+	if (vnode_num < 1 || vnode_num > NR_OF_CSI2_BE_SOC_STREAMS) {
+		vnode_num = NR_OF_CSI2_BE_SOC_STREAMS;
+		dev_warn(&isys->adev->dev, "Invalid video node number %d\n", vnode_num); }
+
 	for (k = 0; k < NR_OF_CSI2_BE_SOC_DEV; k++) {
 		rval = ipu_isys_csi2_be_soc_init(&isys->csi2_be_soc[k],
 						 isys, k);
@@ -470,6 +479,7 @@ static int isys_notifier_init(struct ipu_isys *isys)
 			"v4l2 parse_fwnode_endpoints() failed: %d\n", ret);
 		return ret;
 	}
+
 	if (list_empty(&isys->notifier.asd_list)) {
 		/* isys probe could continue with async subdevs missing */
 		dev_warn(&isys->adev->dev, "no subdev found in graph\n");
@@ -504,11 +514,11 @@ static int isys_register_devices(struct ipu_isys *isys)
 
 	isys->media_dev.dev = &isys->adev->dev;
 	isys->media_dev.ops = &isys_mdev_ops;
-	strlcpy(isys->media_dev.model,
+	strscpy(isys->media_dev.model,
 		IPU_MEDIA_DEV_MODEL_NAME, sizeof(isys->media_dev.model));
 	snprintf(isys->media_dev.bus_info, sizeof(isys->media_dev.bus_info),
 		 "pci:%s", dev_name(isys->adev->dev.parent->parent));
-	strlcpy(isys->v4l2_dev.name, isys->media_dev.model,
+	strscpy(isys->v4l2_dev.name, isys->media_dev.model,
 		sizeof(isys->v4l2_dev.name));
 
 	media_device_init(&isys->media_dev);
@@ -580,7 +590,6 @@ static void isys_unregister_devices(struct ipu_isys *isys)
 	media_device_cleanup(&isys->media_dev);
 }
 
-#ifdef CONFIG_PM
 static int isys_runtime_pm_resume(struct device *dev)
 {
 	struct ipu_bus_device *adev = to_ipu_bus_device(dev);
@@ -667,11 +676,6 @@ static const struct dev_pm_ops isys_pm_ops = {
 	.suspend = isys_suspend,
 	.resume = isys_resume,
 };
-
-#define ISYS_PM_OPS (&isys_pm_ops)
-#else
-#define ISYS_PM_OPS NULL
-#endif
 
 static void isys_remove(struct ipu_bus_device *adev)
 {
@@ -972,10 +976,6 @@ static int isys_probe(struct ipu_bus_device *adev)
 	isys->line_align = IPU_ISYS_2600_MEM_LINE_ALIGN;
 	isys->icache_prefetch = 0;
 
-#ifndef CONFIG_PM
-	isys_setup_hw(isys);
-#endif
-
 	if (!isp->secure_mode) {
 		fw = isp->cpd_fw;
 		rval = ipu_buttress_map_fw_image(adev, fw, &isys->fw_sgt);
@@ -1013,6 +1013,7 @@ static int isys_probe(struct ipu_bus_device *adev)
 	return 0;
 
 out_remove_pkg_dir_shared_buffer:
+	cpu_latency_qos_remove_request(&isys->pm_qos);
 	if (!isp->secure_mode)
 		ipu_cpd_free_pkg_dir(adev, isys->pkg_dir,
 				     isys->pkg_dir_dma_addr,
@@ -1258,7 +1259,7 @@ static struct ipu_bus_driver isys_driver = {
 	.drv = {
 		.name = IPU_ISYS_NAME,
 		.owner = THIS_MODULE,
-		.pm = ISYS_PM_OPS,
+		.pm = &isys_pm_ops,
 	},
 };
 
@@ -1292,3 +1293,6 @@ MODULE_AUTHOR("Yu Xia <yu.y.xia@intel.com>");
 MODULE_AUTHOR("Jerry Hu <jerry.w.hu@intel.com>");
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Intel ipu input system driver");
+#if IS_ENABLED(CONFIG_IPU_BRIDGE)
+MODULE_IMPORT_NS(INTEL_IPU_BRIDGE);
+#endif

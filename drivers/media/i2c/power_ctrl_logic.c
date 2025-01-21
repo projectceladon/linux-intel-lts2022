@@ -80,7 +80,9 @@ static int power_ctrl_logic_add(struct acpi_device *adev)
 	mutex_lock(&pcl.status_lock);
 	pcl.gpio_ready = true;
 	mutex_unlock(&pcl.status_lock);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
 	acpi_dev_clear_dependencies(adev);
+#endif
 
 	dev_dbg(&adev->dev, "@%s, exit\n", __func__);
 	return ret;
