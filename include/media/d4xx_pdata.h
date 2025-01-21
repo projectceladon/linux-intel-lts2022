@@ -22,6 +22,9 @@ struct d4xx_pdata {
 	unsigned int reset_gpio;
 	int FPD_gpio;
 	const char suffix;
+	unsigned int link_freq_mbps;
+	unsigned int deser_nlanes;
+	unsigned int ser_nlanes;
 	struct i2c_board_info *deser_board_info;
 };
 #endif

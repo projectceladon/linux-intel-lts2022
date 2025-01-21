@@ -20,6 +20,9 @@
 #define PIXEL_ORDER_BGGR	2
 #define PIXEL_ORDER_GBRG	3
 
+#define NR_OF_TI960_DEVS	4
+#define NR_OF_TI960_CTRLS	4
+
 #define NR_OF_TI960_VCS_PER_SINK_PAD 2
 #define NR_OF_TI960_VCS_SOURCE_PAD 4
 #define NR_OF_TI960_SOURCE_PADS	1
@@ -64,6 +67,9 @@ struct ti960_pdata {
 	unsigned int reset_gpio;
 	int FPD_gpio;
 	const char suffix;
+	unsigned int link_freq_mbps;
+	unsigned int deser_nlanes;
+	unsigned int ser_nlanes;
 };
 
 #define TI960_MAX_GPIO_POWERUP_SEQ        4

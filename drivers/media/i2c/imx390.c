@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
-// Copyright (c) 2021-2023 Intel Corporation.
+// Copyright (c) 2021-2024 Intel Corporation.
 
-#include <asm/unaligned.h>
 #include <linux/acpi.h>
 #include <linux/delay.h>
 #include <linux/i2c.h>
@@ -9,10 +8,11 @@
 #include <linux/pm_runtime.h>
 #include <linux/gpio.h>
 #include <linux/interrupt.h>
+#include <linux/version.h>
+#include <asm/unaligned.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-fwnode.h>
-#include <linux/version.h>
 #include <media/imx390.h>
 
 #define IMX390_LINK_FREQ_360MHZ		360000000ULL
@@ -26,10 +26,9 @@
 #define IMX390_REG_VALUE_16BIT		2
 
 #define IMX390_REG_CHIP_ID		0x0330
-#define IMX390_CHIP_ID			0x0
 
 /* vertical-timings from sensor */
-#define IMX390_REG_VTS			0x300A
+#define IMX390_REG_VTS			0x2008
 #define IMX390_VTS_MAX			0xffff
 
 #define IMX390_CLK_FREQ			(1485000)
@@ -282,7 +281,7 @@ struct imx390 {
 };
 
 #include "imx390-mode-1280x960-CROP.h"
-#include "imx390_mode_1920x1200HDR3_CUST_PWL12.h"
+#include "imx390_mode_1920x1216HDR3_CUST_PWL12.h"
 
 static int imx390_group_hold_enable(struct imx390 *imx390, s32 val);
 
@@ -1033,9 +1032,9 @@ static const struct imx390_mode supported_modes[] = {
 		.width = 1280,
 		.height = 960,
 		.hdr_en = false,
-		.hts = 2464,
-		.vts_def = 2435,
-		.vts_min = 2435,
+		.hts = 3300,
+		.vts_def = 1250,
+		.vts_min = 1250,
 		.code = MEDIA_BUS_FMT_SGRBG12_1X12,
 		.lanes = 4,
 		.fps = 30,
@@ -1048,18 +1047,18 @@ static const struct imx390_mode supported_modes[] = {
 	},
 	{
 		.width = 1920,
-		.height = 1200,
+		.height = 1216,
 		.hdr_en = true,
-		.hts = 2464,
-		.vts_def = 2435,
-		.vts_min = 2435,
+		.hts = 3300,
+		.vts_def = 1250,
+		.vts_min = 1250,
 		.code = MEDIA_BUS_FMT_SGRBG12_1X12,
 		.lanes = 4,
 		.fps = 30,
 		.bpp = 12,
 		.reg_list = {
-			.num_of_regs = ARRAY_SIZE(imx390_mode_1920x1200HDR3_CUST_PWL12),
-			.regs = imx390_mode_1920x1200HDR3_CUST_PWL12,
+			.num_of_regs = ARRAY_SIZE(imx390_mode_1920x1216HDR3_CUST_PWL12),
+			.regs = imx390_mode_1920x1216HDR3_CUST_PWL12,
 		},
 		.link_freq_index = -1,
 	},
@@ -1146,6 +1145,29 @@ static int imx390_write_reg_list(struct imx390 *imx390,
 			return ret;
 		}
 	}
+
+	return 0;
+}
+
+static int imx390_identify_module(struct imx390 *imx390)
+{
+	struct i2c_client *client = v4l2_get_subdevdata(&imx390->sd);
+	int ret;
+	int retry = 50;
+	u32 val;
+
+	while (retry--) {
+		ret = imx390_read_reg(imx390, IMX390_REG_CHIP_ID,
+				      IMX390_REG_VALUE_16BIT, &val);
+		if (ret == 0)
+			break;
+		usleep_range(100000, 100500);
+	}
+
+	if (ret)
+		return ret;
+
+	dev_info(&client->dev, "chip id: %04x", val);
 
 	return 0;
 }
@@ -1365,6 +1387,10 @@ static int imx390_set_ctrl(struct v4l2_ctrl *ctrl)
 					     struct imx390, ctrl_handler);
 	struct i2c_client *client = v4l2_get_subdevdata(&imx390->sd);
 	int ret = 0;
+
+	/* V4L2 controls values will be applied only when power is already up */
+	if (!pm_runtime_get_if_in_use(&client->dev))
+		return 0;
 
 	switch (ctrl->id) {
 	case IMX390_CID_EXPOSURE_SHS1:
@@ -1678,7 +1704,21 @@ static int __maybe_unused imx390_resume(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct v4l2_subdev *sd = i2c_get_clientdata(client);
 	struct imx390 *imx390 = to_imx390(sd);
+	const struct imx390_reg_list *reg_list;
 	int ret;
+
+	ret = imx390_identify_module(imx390);
+	if (ret == 0) {
+		reg_list = &imx390->cur_mode->reg_list;
+		ret = imx390_write_reg_list(imx390, reg_list);
+		if (ret) {
+			dev_err(&client->dev, "resume: failed to apply cur mode");
+			return ret;
+		}
+	} else {
+		dev_err(&client->dev, "imx390 resume failed");
+		return ret;
+	}
 
 	mutex_lock(&imx390->mutex);
 	if (imx390->streaming) {
@@ -1702,7 +1742,6 @@ static int imx390_set_format(struct v4l2_subdev *sd,
 {
 	struct imx390 *imx390 = to_imx390(sd);
 	const struct imx390_mode *mode;
-	int ret = 0;
 	s32 vblank_def;
 	s64 hblank;
 	int i;
@@ -1884,30 +1923,7 @@ static const struct v4l2_subdev_internal_ops imx390_internal_ops = {
 	.open = imx390_open,
 };
 
-static int imx390_identify_module(struct imx390 *imx390)
-{
-	struct i2c_client *client = v4l2_get_subdevdata(&imx390->sd);
-	int ret;
-	u32 val;
-
-	ret = imx390_read_reg(imx390, IMX390_REG_CHIP_ID,
-			      IMX390_REG_VALUE_08BIT, &val);
-	if (ret)
-		return ret;
-
-	return 0;
-
-	/* chip id not known yet */
-	if (val != IMX390_CHIP_ID) {
-		dev_err(&client->dev, "chip id mismatch: %x!=%x",
-			IMX390_CHIP_ID, val);
-		return -ENXIO;
-	}
-
-	return 0;
-}
-
-static int imx390_remove(struct i2c_client *client)
+static void imx390_remove(struct i2c_client *client)
 {
 	struct v4l2_subdev *sd = i2c_get_clientdata(client);
 	struct imx390 *imx390 = to_imx390(sd);
@@ -1918,29 +1934,7 @@ static int imx390_remove(struct i2c_client *client)
 	pm_runtime_disable(&client->dev);
 	mutex_destroy(&imx390->mutex);
 
-	return 0;
 }
-
-irqreturn_t imx390_threaded_irq_fn(int irq, void *dev_id)
-{
-	struct imx390 *imx390 = dev_id;
-
-	mutex_lock(&imx390->mutex);
-	if (imx390->streaming == false) {
-		gpio_set_value(imx390->platform_data->gpios[0], 0);
-		goto imx390_irq_handled;
-	}
-	if (imx390->strobe_source->val == V4L2_FLASH_STROBE_SOURCE_EXTERNAL) {
-
-		gpio_set_value(imx390->platform_data->gpios[0],
-				gpio_get_value(imx390->platform_data->irq_pin));
-	}
-
-imx390_irq_handled:
-	mutex_unlock(&imx390->mutex);
-	return IRQ_HANDLED;
-}
-
 static int imx390_probe(struct i2c_client *client)
 {
 	struct v4l2_subdev *sd;
@@ -1988,7 +1982,7 @@ static int imx390_probe(struct i2c_client *client)
 
 	mutex_init(&imx390->mutex);
 
-	/* 1920x1200 default */
+	/* 1920x1216 default */
 	imx390->cur_mode = &supported_modes[1];
 	imx390->pre_mode = imx390->cur_mode;
 

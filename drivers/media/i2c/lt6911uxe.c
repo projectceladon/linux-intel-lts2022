@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 // Copyright (c) 2023 Intel Corporation.
 
-#include <asm/unaligned.h>
 #include <linux/acpi.h>
 #include <linux/delay.h>
 #include <linux/i2c.h>
@@ -12,6 +11,8 @@
 #include <linux/of_device.h>
 #include <linux/of_gpio.h>
 #include <linux/v4l2-dv-timings.h>
+#include <linux/version.h>
+#include <asm/unaligned.h>
 
 #include <media/v4l2-dv-timings.h>
 #include <media/v4l2-ctrls.h>
@@ -21,7 +22,6 @@
 #include <media/v4l2-fwnode.h>
 #include <linux/types.h>
 
-#include <linux/version.h>
 #include <media/lt6911uxe.h>
 
 /* v4l2 debug level */
@@ -1392,6 +1392,8 @@ static int lt6911uxe_probe(struct i2c_client *client)
 	if (-1 != lt6911uxe->platform_data->reset_pin)
 		if (!gpio_get_value(lt6911uxe->platform_data->reset_pin))
 			gpio_set_value(lt6911uxe->platform_data->reset_pin, 1);
+
+	msleep(50);
 
 	if (-1 != lt6911uxe->platform_data->irq_pin) {
 		lt6911uxe->auxiliary_port = false;

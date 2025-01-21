@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
-// Copyright (C) 2014 - 2020 Intel Corporation
+// Copyright (C) 2014 - 2024 Intel Corporation
 
 #include <linux/device.h>
 #include <linux/module.h>
@@ -73,9 +73,10 @@ static int __subdev_link_validate(struct v4l2_subdev *sd,
 				  struct v4l2_subdev_format *source_fmt,
 				  struct v4l2_subdev_format *sink_fmt)
 {
-	struct ipu_isys_pipeline *ip =
-		container_of(media_entity_pipeline(&sd->entity),
-			     struct ipu_isys_pipeline, pipe);
+	struct media_pipeline *mp = media_entity_pipeline(&sd->entity);
+	struct ipu_isys_pipeline *ip = container_of(mp,
+						    struct ipu_isys_pipeline,
+						    pipe);
 
 	ip->csi2_be = to_ipu_isys_csi2_be(sd);
 	return ipu_isys_subdev_link_validate(sd, link, source_fmt, sink_fmt);
@@ -246,13 +247,13 @@ int ipu_isys_csi2_be_init(struct ipu_isys_csi2_be *csi2_be,
 	rval = ipu_isys_subdev_init(&csi2_be->asd, &csi2_be_sd_ops, 0,
 				    NR_OF_CSI2_BE_PADS,
 				    NR_OF_CSI2_BE_SOURCE_PADS,
-				    NR_OF_CSI2_BE_SINK_PADS, 0);
+				    NR_OF_CSI2_BE_SINK_PADS, 0,
+				    CSI2_BE_PAD_SOURCE,
+				    CSI2_BE_PAD_SINK);
 	if (rval)
 		goto fail;
 
-	csi2_be->asd.pad[CSI2_BE_PAD_SINK].flags = MEDIA_PAD_FL_SINK
-	    | MEDIA_PAD_FL_MUST_CONNECT;
-	csi2_be->asd.pad[CSI2_BE_PAD_SOURCE].flags = MEDIA_PAD_FL_SOURCE;
+	csi2_be->asd.pad[CSI2_BE_PAD_SINK].flags |= MEDIA_PAD_FL_MUST_CONNECT;
 	csi2_be->asd.valid_tgts[CSI2_BE_PAD_SOURCE].crop = true;
 	csi2_be->asd.set_ffmt = csi2_be_set_ffmt;
 

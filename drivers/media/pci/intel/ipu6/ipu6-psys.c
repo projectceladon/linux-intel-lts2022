@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
-// Copyright (C) 2022 Intel Corporation
+// Copyright (C) 2020 - 2024 Intel Corporation
 
 #include <linux/uaccess.h>
 #include <linux/device.h>
@@ -10,7 +10,11 @@
 #include <linux/kthread.h>
 #include <linux/init_task.h>
 #include <linux/version.h>
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
+#include <linux/sched.h>
+#else
 #include <uapi/linux/sched/types.h>
+#endif
 #include <linux/module.h>
 #include <linux/fs.h>
 
@@ -19,6 +23,8 @@
 #include "ipu6-ppg.h"
 #include "ipu-platform-regs.h"
 #include "ipu-trace.h"
+
+MODULE_IMPORT_NS(DMA_BUF);
 
 static bool early_pg_transfer;
 module_param(early_pg_transfer, bool, 0664);
@@ -247,16 +253,9 @@ static struct ipu_psys_kcmd *ipu_psys_copy_cmd(struct ipu_psys_command *cmd,
 	}
 
 	/* check and remap if possibe */
-	ret = ipu_psys_mapbuf_locked(fd, fh, kpgbuf);
-	if (ret) {
-		dev_err(&psys->adev->dev, "%s remap failed\n", __func__);
-		mutex_unlock(&fh->mutex);
-		goto error;
-	}
-
-	kpgbuf = ipu_psys_lookup_kbuffer(fh, fd);
+	kpgbuf = ipu_psys_mapbuf_locked(fd, fh);
 	if (!kpgbuf || !kpgbuf->sgt) {
-		WARN(1, "kbuf not found or unmapped.\n");
+		dev_err(&psys->adev->dev, "%s remap failed\n", __func__);
 		mutex_unlock(&fh->mutex);
 		goto error;
 	}
@@ -345,17 +344,10 @@ static struct ipu_psys_kcmd *ipu_psys_copy_cmd(struct ipu_psys_command *cmd,
 			goto error;
 		}
 
-		ret = ipu_psys_mapbuf_locked(fd, fh, kpgbuf);
-		if (ret) {
+		kpgbuf = ipu_psys_mapbuf_locked(fd, fh);
+		if (!kpgbuf || !kpgbuf->sgt) {
 			dev_err(&psys->adev->dev, "%s remap failed\n",
 				__func__);
-			mutex_unlock(&fh->mutex);
-			goto error;
-		}
-
-		kpgbuf = ipu_psys_lookup_kbuffer(fh, fd);
-		if (!kpgbuf || !kpgbuf->sgt) {
-			WARN(1, "kbuf not found or unmapped.\n");
 			mutex_unlock(&fh->mutex);
 			goto error;
 		}
@@ -844,7 +836,7 @@ int ipu_psys_fh_init(struct ipu_psys_fh *fh)
 	mutex_init(&sched->bs_mutex);
 	INIT_LIST_HEAD(&sched->buf_sets);
 	INIT_LIST_HEAD(&sched->ppgs);
-	pm_runtime_dont_use_autosuspend(&psys->adev->dev);
+
 	/* allocate and map memory for buf_sets */
 	for (i = 0; i < IPU_PSYS_BUF_SET_POOL_SIZE; i++) {
 		kbuf_set = kzalloc(sizeof(*kbuf_set), GFP_KERNEL);
