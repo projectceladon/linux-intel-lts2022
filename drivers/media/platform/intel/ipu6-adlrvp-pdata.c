@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
-// Copyright (C) 2023 Intel Corporation
+// Copyright (C) 2022-2024 Intel Corporation
 #include <linux/clk.h>
 #include <linux/clkdev.h>
 #include <linux/gpio.h>
@@ -15,6 +15,9 @@
 #endif
 #if IS_ENABLED(CONFIG_VIDEO_IMX390)
 #include <media/imx390.h>
+#endif
+#if IS_ENABLED(CONFIG_VIDEO_ISX031)
+#include <media/isx031.h>
 #endif
 #if IS_ENABLED(CONFIG_VIDEO_LT6911UXC)
 #include <media/lt6911uxc.h>
@@ -120,105 +123,9 @@ static struct ipu_isys_subdev_info ar0234_sd_2 = {
 #if IS_ENABLED(CONFIG_VIDEO_IMX390)
 #define IMX390_LANES       4
 #define IMX390_D3RCM_I2C_ADDRESS 0x1a
-#define IMX390_D3RCM_I2C_ADDRESS_8BIT (IMX390_D3RCM_I2C_ADDRESS << 1)
-#define IMX390_D3CM_I2C_ADDRESS 0x21
-#define IMX390_D3CM_I2C_ADDRESS_8BIT (IMX390_D3CM_I2C_ADDRESS << 1)
 #define IMX390_I2C_ADDRESS_3 0x1e
-#define IMX390_I2C_ADDRESS_8BIT_3 (IMX390_I2C_ADDRESS_3 << 1)
 #define IMX390_I2C_ADDRESS_4 0x20
-#define IMX390_I2C_ADDRESS_8BIT_4 (IMX390_I2C_ADDRESS_4 << 1)
 
-static struct ipu_isys_csi2_config imx390_csi2_cfg_1 = {
-	.nlanes = IMX390_LANES,
-	.port = 1,
-};
-
-static struct imx390_platform_data imx390_pdata_1 = {
-	.port = 1,
-	.lanes = 4,
-	.i2c_slave_address = IMX390_I2C_ADDRESS_3,
-	.suffix = 'a',
-};
-
-static struct ipu_isys_subdev_info imx390_sd_1 = {
-	.csi2 = &imx390_csi2_cfg_1,
-	.i2c = {
-	.board_info = {
-		I2C_BOARD_INFO("imx390", IMX390_I2C_ADDRESS_3),
-		.platform_data = &imx390_pdata_1,
-	},
-	.i2c_adapter_bdf = "0000:00:15.1",
-	},
-};
-
-static struct ipu_isys_csi2_config imx390_csi2_cfg_2 = {
-	.nlanes = IMX390_LANES,
-	.port = 2,
-};
-
-static struct imx390_platform_data imx390_pdata_2 = {
-	.port = 2,
-	.lanes = 4,
-	.i2c_slave_address = IMX390_I2C_ADDRESS_3,
-	.suffix = 'b',
-};
-
-static struct ipu_isys_subdev_info imx390_sd_2 = {
-	.csi2 = &imx390_csi2_cfg_2,
-	.i2c = {
-	.board_info = {
-		I2C_BOARD_INFO("imx390", IMX390_I2C_ADDRESS_3),
-		.platform_data = &imx390_pdata_2,
-	},
-	.i2c_adapter_bdf = "0000:00:19.1",
-	},
-};
-
-static struct ipu_isys_csi2_config imx390_csi2_cfg_3 = {
-	.nlanes = IMX390_LANES,
-	.port = 1,
-};
-
-static struct imx390_platform_data imx390_pdata_3 = {
-	.port = 1,
-	.lanes = 4,
-	.i2c_slave_address = IMX390_I2C_ADDRESS_4,
-	.suffix = 'a',
-};
-
-static struct ipu_isys_subdev_info imx390_sd_3 = {
-	.csi2 = &imx390_csi2_cfg_1,
-	.i2c = {
-	.board_info = {
-		I2C_BOARD_INFO("imx390", IMX390_I2C_ADDRESS_4),
-		.platform_data = &imx390_pdata_1,
-	},
-	.i2c_adapter_bdf = "0000:00:15.1",
-	},
-};
-
-static struct ipu_isys_csi2_config imx390_csi2_cfg_4 = {
-	.nlanes = IMX390_LANES,
-	.port = 2,
-};
-
-static struct imx390_platform_data imx390_pdata_4 = {
-	.port = 2,
-	.lanes = 4,
-	.i2c_slave_address = IMX390_I2C_ADDRESS_4,
-	.suffix = 'b',
-};
-
-static struct ipu_isys_subdev_info imx390_sd_4 = {
-	.csi2 = &imx390_csi2_cfg_2,
-	.i2c = {
-	.board_info = {
-		I2C_BOARD_INFO("imx390", IMX390_I2C_ADDRESS_4),
-		.platform_data = &imx390_pdata_2,
-	},
-	.i2c_adapter_bdf = "0000:00:19.1",
-	},
-};
 #endif
 
 #if IS_ENABLED(CONFIG_VIDEO_TI960)
@@ -252,6 +159,27 @@ static struct ti960_subdev_pdata imx390_d3cm_pdata_stub = {
 };
 #endif
 
+#if IS_ENABLED(CONFIG_VIDEO_ISX031)
+
+#define ISX031A_ADDRESS		0x44
+#define ISX031B_ADDRESS		0x45
+#define ISX031C_ADDRESS		0x46
+#define ISX031D_ADDRESS		0x47
+
+#define ISX031A_SER_ADDRESS	0x40
+#define ISX031B_SER_ADDRESS	0x41
+#define ISX031C_SER_ADDRESS	0x42
+#define ISX031D_SER_ADDRESS	0x43
+
+static struct ti960_subdev_pdata isx031_pdata_stub = {
+  .lanes = 4,
+  .fsin = 2,
+  .gpio_powerup_seq = {0x00, 0x08, 0x08, -1},
+  .module_flags = TI960_FL_POWERUP,
+  .module_name = "isx031",
+};
+#endif
+
 static struct ipu_isys_csi2_config ti960_csi2_cfg_1 = {
 	.nlanes = TI960_LANES,
 	.port = 1,
@@ -262,7 +190,53 @@ static struct ipu_isys_csi2_config ti960_csi2_cfg_2 = {
 	.port = 2,
 };
 
-static struct ti960_subdev_info ti960_subdevs[] = {
+static struct ti960_subdev_info ti960_subdevs_1[] = {
+#if IS_ENABLED(CONFIG_VIDEO_ISX031)
+	{
+		.board_info = {
+			.type = "isx031",
+			.addr = ISX031A_ADDRESS,
+			.platform_data = &isx031_pdata_stub,
+		},
+		.rx_port = 0,
+		.phy_i2c_addr = ISX031_I2C_ADDRESS,
+		.ser_alias = ISX031A_SER_ADDRESS,
+		.suffix = 'a',
+	},
+	{
+		.board_info = {
+			.type = "isx031",
+			.addr = ISX031B_ADDRESS,
+			.platform_data = &isx031_pdata_stub,
+		},
+		.rx_port = 1,
+		.phy_i2c_addr = ISX031_I2C_ADDRESS,
+		.ser_alias = ISX031B_SER_ADDRESS,
+		.suffix = 'b',
+	},
+	{
+		.board_info = {
+			.type = "isx031",
+			.addr = ISX031C_ADDRESS,
+			.platform_data = &isx031_pdata_stub,
+		},
+		.rx_port = 2,
+		.phy_i2c_addr = ISX031_I2C_ADDRESS,
+		.ser_alias = ISX031C_SER_ADDRESS,
+		.suffix = 'c',
+	},
+	{
+		.board_info = {
+			.type = "isx031",
+			.addr = ISX031D_ADDRESS,
+			.platform_data = &isx031_pdata_stub,
+		},
+		.rx_port = 3,
+		.phy_i2c_addr = ISX031_I2C_ADDRESS,
+		.ser_alias = ISX031D_SER_ADDRESS,
+		.suffix = 'd',
+	},
+#endif
 #if IS_ENABLED(CONFIG_VIDEO_IMX390)
 	/* D3RCM */
 	{
@@ -272,7 +246,7 @@ static struct ti960_subdev_info ti960_subdevs[] = {
 			.platform_data = &imx390_d3rcm_pdata_stub,
 		},
 		.rx_port = 0,
-		.phy_i2c_addr = IMX390_D3RCM_I2C_ADDRESS_8BIT,
+		.phy_i2c_addr = IMX390_D3RCM_I2C_ADDRESS,
 		.ser_alias = IMX390A_SER_ADDRESS,
 		.suffix = 'a',
 	},
@@ -283,7 +257,7 @@ static struct ti960_subdev_info ti960_subdevs[] = {
 			.platform_data = &imx390_d3rcm_pdata_stub,
 		},
 		.rx_port = 1,
-		.phy_i2c_addr = IMX390_D3RCM_I2C_ADDRESS_8BIT,
+		.phy_i2c_addr = IMX390_D3RCM_I2C_ADDRESS,
 		.ser_alias = IMX390B_SER_ADDRESS,
 		.suffix = 'b',
 	},
@@ -294,7 +268,7 @@ static struct ti960_subdev_info ti960_subdevs[] = {
 			.platform_data = &imx390_d3rcm_pdata_stub,
 		},
 		.rx_port = 2,
-		.phy_i2c_addr = IMX390_D3RCM_I2C_ADDRESS_8BIT,
+		.phy_i2c_addr = IMX390_D3RCM_I2C_ADDRESS,
 		.ser_alias = IMX390C_SER_ADDRESS,
 		.suffix = 'c',
 	},
@@ -305,7 +279,7 @@ static struct ti960_subdev_info ti960_subdevs[] = {
 			.platform_data = &imx390_d3rcm_pdata_stub,
 		},
 		.rx_port = 3,
-		.phy_i2c_addr = IMX390_D3RCM_I2C_ADDRESS_8BIT,
+		.phy_i2c_addr = IMX390_D3RCM_I2C_ADDRESS,
 		.ser_alias = IMX390D_SER_ADDRESS,
 		.suffix = 'd',
 	},
@@ -317,7 +291,7 @@ static struct ti960_subdev_info ti960_subdevs[] = {
 			.platform_data = &imx390_d3cm_pdata_stub,
 		},
 		.rx_port = 0,
-		.phy_i2c_addr = IMX390_D3CM_I2C_ADDRESS_8BIT,
+		.phy_i2c_addr = IMX390_D3CM_I2C_ADDRESS,
 		.ser_alias = IMX390A_SER_ADDRESS,
 		.suffix = 'a',
 	},
@@ -328,7 +302,7 @@ static struct ti960_subdev_info ti960_subdevs[] = {
 			.platform_data = &imx390_d3cm_pdata_stub,
 		},
 		.rx_port = 1,
-		.phy_i2c_addr = IMX390_D3CM_I2C_ADDRESS_8BIT,
+		.phy_i2c_addr = IMX390_D3CM_I2C_ADDRESS,
 		.ser_alias = IMX390B_SER_ADDRESS,
 		.suffix = 'b',
 	},
@@ -339,7 +313,7 @@ static struct ti960_subdev_info ti960_subdevs[] = {
 			.platform_data = &imx390_d3cm_pdata_stub,
 		},
 		.rx_port = 2,
-		.phy_i2c_addr = IMX390_D3CM_I2C_ADDRESS_8BIT,
+		.phy_i2c_addr = IMX390_D3CM_I2C_ADDRESS,
 		.ser_alias = IMX390C_SER_ADDRESS,
 		.suffix = 'c',
 	},
@@ -350,24 +324,73 @@ static struct ti960_subdev_info ti960_subdevs[] = {
 			.platform_data = &imx390_d3cm_pdata_stub,
 		},
 		.rx_port = 3,
-		.phy_i2c_addr = IMX390_D3CM_I2C_ADDRESS_8BIT,
+		.phy_i2c_addr = IMX390_D3CM_I2C_ADDRESS,
 		.ser_alias = IMX390D_SER_ADDRESS,
 		.suffix = 'd',
 	},
 #endif
 };
 
+static struct ti960_subdev_info ti960_subdevs_2[] = {
+#if IS_ENABLED(CONFIG_VIDEO_ISX031)
+	{
+		.board_info = {
+			.type = "isx031",
+			.addr = ISX031A_ADDRESS,
+			.platform_data = &isx031_pdata_stub,
+		},
+		.rx_port = 0,
+		.phy_i2c_addr = ISX031_I2C_ADDRESS,
+		.ser_alias = ISX031A_SER_ADDRESS,
+		.suffix = 'e',
+	},
+	{
+		.board_info = {
+			.type = "isx031",
+			.addr = ISX031B_ADDRESS,
+			.platform_data = &isx031_pdata_stub,
+		},
+		.rx_port = 1,
+		.phy_i2c_addr = ISX031_I2C_ADDRESS,
+		.ser_alias = ISX031B_SER_ADDRESS,
+		.suffix = 'f',
+	},
+	{
+		.board_info = {
+			.type = "isx031",
+			.addr = ISX031C_ADDRESS,
+			.platform_data = &isx031_pdata_stub,
+		},
+		.rx_port = 2,
+		.phy_i2c_addr = ISX031_I2C_ADDRESS,
+		.ser_alias = ISX031C_SER_ADDRESS,
+		.suffix = 'g',
+	},
+	{
+		.board_info = {
+			.type = "isx031",
+			.addr = ISX031D_ADDRESS,
+			.platform_data = &isx031_pdata_stub,
+		},
+		.rx_port = 3,
+		.phy_i2c_addr = ISX031_I2C_ADDRESS,
+		.ser_alias = ISX031D_SER_ADDRESS,
+		.suffix = 'h',
+	},
+#endif
+};
+
 static struct ti960_pdata ti960_pdata_1 = {
-	.subdev_info = ti960_subdevs,
-	.subdev_num = ARRAY_SIZE(ti960_subdevs),
+	.subdev_info = ti960_subdevs_1,
+	.subdev_num = ARRAY_SIZE(ti960_subdevs_1),
 	.reset_gpio = 0,
 	.FPD_gpio = -1,
 	.suffix = 'a',
 };
 
 static struct ti960_pdata ti960_pdata_2 = {
-	.subdev_info = ti960_subdevs,
-	.subdev_num = ARRAY_SIZE(ti960_subdevs),
+	.subdev_info = ti960_subdevs_2,
+	.subdev_num = ARRAY_SIZE(ti960_subdevs_2),
 	.reset_gpio = 0,
 	.FPD_gpio = -1,
 	.suffix = 'b',
@@ -675,6 +698,186 @@ static struct ipu_isys_subdev_info d4xx_sd_3 = {
 };
 #endif
 
+#if IS_ENABLED(CONFIG_INTEL_IPU6_CHIMERA)
+
+#define CHIMERA_LANES           2
+#define CHIMERA1_I2C_ADDRESS     0x11
+#define CHIMERA2_I2C_ADDRESS     0x12
+#define CHIMERA3_I2C_ADDRESS     0x14
+#define CHIMERA4_I2C_ADDRESS     0x15
+
+/* for port0 MCSI0 */
+static struct crlmodule_platform_data chimera_pdata = {
+	.lanes = CHIMERA_LANES,
+	.ext_clk = 19200000,
+	.op_sys_clock = (uint64_t []){ 750000000 },
+	.module_name = "CHIMERA1",
+};
+
+static struct ipu_isys_csi2_config chimera_csi2_cfg = {
+	.nlanes = CHIMERA_LANES,
+	.port = 0,
+};
+
+static struct ipu_isys_subdev_info chimera_crl_sd = {
+	.csi2 = &chimera_csi2_cfg,
+	.i2c = {
+		.board_info = {
+			I2C_BOARD_INFO(CRLMODULE_NAME, CHIMERA1_I2C_ADDRESS),
+			.platform_data = &chimera_pdata,
+		},
+		.i2c_adapter_id = 2, // for mineral hill
+		//.i2c_adapter_id = 5, // for leaf hill rework connection
+	},
+
+};
+
+/* for port1 MCSI1 */
+static struct crlmodule_platform_data chimera_pdata_2 = {
+	.lanes = CHIMERA_LANES,
+	.ext_clk = 19200000,
+	.op_sys_clock = (uint64_t []){ 750000000 },
+	.module_name = "CHIMERA2",
+};
+
+static struct ipu_isys_csi2_config chimera_csi2_cfg_2 = {
+	.nlanes = CHIMERA_LANES,
+	.port = 2,
+};
+
+static struct ipu_isys_subdev_info chimera_crl_sd_2 = {
+	.csi2 = &chimera_csi2_cfg_2,
+	.i2c = {
+		.board_info = {
+			I2C_BOARD_INFO(CRLMODULE_NAME, CHIMERA2_I2C_ADDRESS),
+			.platform_data = &chimera_pdata_2,
+		},
+		.i2c_adapter_id = 2,
+	},
+
+};
+
+/* for port0 MNPH 0 */
+static struct crlmodule_platform_data chimera_pdata_3 = {
+	.lanes = CHIMERA_LANES,
+	.ext_clk = 19200000,
+	.op_sys_clock = (uint64_t []){ 750000000 },
+	.module_name = "CHIMERA3",
+};
+
+static struct ipu_isys_csi2_config chimera_csi2_cfg_3 = {
+	.nlanes = CHIMERA_LANES,
+	.port = 4,
+};
+
+static struct ipu_isys_subdev_info chimera_crl_sd_3 = {
+	.csi2 = &chimera_csi2_cfg_3,
+	.i2c = {
+		.board_info = {
+			I2C_BOARD_INFO(CRLMODULE_NAME, CHIMERA3_I2C_ADDRESS),
+			.platform_data = &chimera_pdata_3,
+		},
+		.i2c_adapter_id = 0,
+	},
+
+};
+
+/* for port1 MNPH 1 */
+static struct crlmodule_platform_data chimera_pdata_4 = {
+	.lanes = CHIMERA_LANES,
+	.ext_clk = 19200000,
+	.op_sys_clock = (uint64_t []){ 750000000 },
+	.module_name = "CHIMERA4",
+};
+
+static struct ipu_isys_csi2_config chimera_csi2_cfg_4 = {
+	.nlanes = CHIMERA_LANES,
+	.port = 5,
+};
+
+static struct ipu_isys_subdev_info chimera_crl_sd_4 = {
+	.csi2 = &chimera_csi2_cfg_4,
+	.i2c = {
+		.board_info = {
+			I2C_BOARD_INFO(CRLMODULE_NAME, CHIMERA4_I2C_ADDRESS),
+			.platform_data = &chimera_pdata_4,
+		},
+		.i2c_adapter_id = 0,
+	},
+
+};
+#endif
+
+#if IS_ENABLED(CONFIG_VIDEO_CHIMERA)
+
+#define CHIMERA_LANES           2
+#define CHIMERA1_I2C_ADDRESS     0x11
+#define CHIMERA2_I2C_ADDRESS     0x12
+#define CHIMERA3_I2C_ADDRESS     0x14
+#define CHIMERA4_I2C_ADDRESS     0x15
+
+/* for port0 MCSI0 */
+static struct ipu_isys_csi2_config chimera_csi2_cfg_1 = {
+	.nlanes = CHIMERA_LANES,
+	.port = 0,
+};
+
+static struct ipu_isys_subdev_info chimera_sd_1 = {
+	.csi2 = &chimera_csi2_cfg_1,
+	.i2c = {
+	.board_info = {
+		I2C_BOARD_INFO("chimera", CHIMERA1_I2C_ADDRESS),
+	},
+	.i2c_adapter_id = 2, // for mineral hill
+	},
+};
+
+static struct ipu_isys_csi2_config chimera_csi2_cfg_2 = {
+	.nlanes = CHIMERA_LANES,
+	.port = 2,
+};
+
+static struct ipu_isys_subdev_info chimera_sd_2 = {
+	.csi2 = &chimera_csi2_cfg_2,
+	.i2c = {
+	.board_info = {
+		I2C_BOARD_INFO("chimera", CHIMERA2_I2C_ADDRESS),
+	},
+	.i2c_adapter_id = 2, // for mineral hill
+	},
+};
+
+static struct ipu_isys_csi2_config chimera_csi2_cfg_3 = {
+	.nlanes = CHIMERA_LANES,
+	.port = 4,
+};
+
+static struct ipu_isys_subdev_info chimera_sd_3 = {
+	.csi2 = &chimera_csi2_cfg_3,
+	.i2c = {
+	.board_info = {
+		I2C_BOARD_INFO("chimera", CHIMERA3_I2C_ADDRESS),
+	},
+	.i2c_adapter_id = 0, // for mineral hill
+	},
+};
+
+static struct ipu_isys_csi2_config chimera_csi2_cfg_4 = {
+	.nlanes = CHIMERA_LANES,
+	.port = 5,
+};
+
+static struct ipu_isys_subdev_info chimera_sd_4 = {
+	.csi2 = &chimera_csi2_cfg_4,
+	.i2c = {
+	.board_info = {
+		I2C_BOARD_INFO("chimera", CHIMERA4_I2C_ADDRESS),
+	},
+	.i2c_adapter_id = 0, // for mineral hill
+	},
+};
+#endif
+
 static struct ipu_isys_clk_mapping clk_mapping[] = {
 	{ CLKDEV_INIT(NULL, NULL, NULL), NULL }
 };
@@ -702,6 +905,12 @@ static struct ipu_isys_subdev_pdata pdata = {
 		&d4xx_sd_1,
 		&d4xx_sd_2,
 		&d4xx_sd_3,
+#endif
+#if IS_ENABLED(CONFIG_VIDEO_CHIMERA)
+		&chimera_sd_1,
+		&chimera_sd_2,
+		&chimera_sd_3,
+		&chimera_sd_4,
 #endif
 		NULL,
 	},

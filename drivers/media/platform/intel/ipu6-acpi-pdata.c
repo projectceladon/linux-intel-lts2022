@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2016--2023 Intel Corporation.
+ * Copyright (c) 2016--2024 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License version
@@ -51,7 +51,7 @@ struct ipu_isys_subdev_pdata *get_acpi_subdev_pdata(void)
 }
 EXPORT_SYMBOL(get_acpi_subdev_pdata);
 
-void print_serdes_sdinfo(struct serdes_subdev_info *sdinfo)
+static void print_serdes_sdinfo(struct serdes_subdev_info *sdinfo)
 {
 	int j;
 	struct serdes_module_pdata *sd_mpdata = sdinfo->board_info.platform_data;
@@ -79,7 +79,7 @@ void print_serdes_sdinfo(struct serdes_subdev_info *sdinfo)
 				(int)sd_mpdata->gpio_powerup_seq[j]);
 }
 
-void print_serdes_subdev(struct ipu_isys_subdev_info *sd)
+static void print_serdes_subdev(struct ipu_isys_subdev_info *sd)
 {
 	struct serdes_platform_data *sd_pdata = sd->i2c.board_info.platform_data;
 	int i;
@@ -119,7 +119,7 @@ void print_serdes_subdev(struct ipu_isys_subdev_info *sd)
 
 }
 
-void print_subdev(struct ipu_isys_subdev_info *sd)
+static void print_subdev(struct ipu_isys_subdev_info *sd)
 {
 	struct sensor_platform_data *spdata = sd->i2c.board_info.platform_data;
 	int i;
@@ -153,7 +153,7 @@ void print_subdev(struct ipu_isys_subdev_info *sd)
 		pr_debug("\t\tgpios[%d] \t\t= %d", i, spdata->gpios[i]);
 }
 
-void add_local_subdevs(struct ipu_isys_subdev_info *new_subdev_info)
+static void add_local_subdevs(struct ipu_isys_subdev_info *new_subdev_info)
 {
 	struct ipu_isys_subdev_pdata *ptr_acpi_subdev_pdata = &acpi_subdev_pdata;
 	int i = 0;
@@ -168,7 +168,7 @@ void add_local_subdevs(struct ipu_isys_subdev_info *new_subdev_info)
 	}
 }
 
-void update_short(struct device *dev,
+static void update_short(struct device *dev,
 		char msg[MSG_LEN],
 		unsigned short *old_short,
 		unsigned int new_short)
@@ -179,7 +179,7 @@ void update_short(struct device *dev,
 	}
 }
 
-void update_hex(struct device *dev,
+static void update_hex(struct device *dev,
 		char msg[MSG_LEN],
 		unsigned int *old_hex,
 		unsigned int new_hex)
@@ -190,7 +190,7 @@ void update_hex(struct device *dev,
 	}
 }
 
-void update_int(struct device *dev,
+static void update_int(struct device *dev,
 		char msg[MSG_LEN],
 		unsigned int *old_int,
 		unsigned int new_int)
@@ -201,7 +201,7 @@ void update_int(struct device *dev,
 	}
 }
 
-void update_inta(struct device *dev,
+static void update_inta(struct device *dev,
 		char msg[MSG_LEN],
 		int old_int[MSG_LEN],
 		int new_int[MSG_LEN],
@@ -217,18 +217,18 @@ void update_inta(struct device *dev,
 	}
 }
 
-void update_str(struct device *dev,
+static void update_str(struct device *dev,
 		char msg[MSG_LEN],
 		char old_str[MSG_LEN],
 		char new_str[MSG_LEN])
 {
 	if (strcmp(old_str, new_str) != 0) {
 		dev_info(dev, "%s %s -> %s", msg, old_str, new_str);
-		strlcpy(old_str, new_str, strlen(new_str)+1);
+		strscpy(old_str, new_str, strlen(new_str)+1);
 	}
 }
 
-void update_subdev(struct device *dev,
+static void update_subdev(struct device *dev,
 			struct ipu_isys_subdev_info *new_sd,
 			struct ipu_isys_subdev_info **old_sd)
 {
@@ -260,7 +260,7 @@ void update_subdev(struct device *dev,
 	update_inta(dev, "pdata gpios", old_pdata->gpios, new_pdata->gpios, IPU_SPDATA_GPIO_NUM);
 }
 
-void update_serdes_subdev(struct device *dev,
+static void update_serdes_subdev(struct device *dev,
 			struct ipu_isys_subdev_info *new_sd,
 			struct ipu_isys_subdev_info **old_sd)
 {
@@ -319,7 +319,7 @@ void update_serdes_subdev(struct device *dev,
 	}
 }
 
-int compare_subdev(struct device *dev,
+static int compare_subdev(struct device *dev,
 			struct ipu_isys_subdev_info *new_subdev,
 			struct ipu_isys_subdev_info *old_subdev,
 			enum connection_type connect)
@@ -371,7 +371,7 @@ int compare_subdev(struct device *dev,
 	return -1;
 }
 
-void update_pdata(struct device *dev,
+static void update_pdata(struct device *dev,
 			struct ipu_isys_subdev_info *new_subdev,
 			enum connection_type connect)
 {
@@ -441,8 +441,9 @@ void update_pdata(struct device *dev,
 				print_serdes_subdev(acpi_subdev);
 			}
 		}
-	} else {
-		/* does not have existing pdata */
+	}
+	/* does not have existing pdata */
+	else {
 		/* print new subdev */
 		if (connect == TYPE_DIRECT) {
 			pr_debug("New sensor subdev\n");
@@ -464,7 +465,7 @@ void update_pdata(struct device *dev,
 	}
 }
 
-void set_ti960_gpio(struct control_logic_data *ctl_data, struct serdes_platform_data **pdata)
+static void set_ti960_gpio(struct control_logic_data *ctl_data, struct serdes_platform_data **pdata)
 {
 	int i;
 
@@ -485,7 +486,7 @@ void set_ti960_gpio(struct control_logic_data *ctl_data, struct serdes_platform_
 	}
 }
 
-void set_lt_gpio(struct control_logic_data *ctl_data, struct sensor_platform_data **pdata,
+static void set_lt_gpio(struct control_logic_data *ctl_data, struct sensor_platform_data **pdata,
 			bool is_dummy)
 {
 	int i;
@@ -514,7 +515,7 @@ void set_lt_gpio(struct control_logic_data *ctl_data, struct sensor_platform_dat
 				(*pdata)->irq_pin_flags = IRQF_TRIGGER_RISING |
 							IRQF_TRIGGER_FALLING |
 							IRQF_ONESHOT;
-				strlcpy((*pdata)->irq_pin_name, "READY_STAT", sizeof("READY_STAT"));
+				strscpy((*pdata)->irq_pin_name, "READY_STAT", sizeof("READY_STAT"));
 			}
 
 			/* check for HDMI_DETECT selection in BIOS */
@@ -524,7 +525,7 @@ void set_lt_gpio(struct control_logic_data *ctl_data, struct sensor_platform_dat
 	}
 }
 
-void set_common_gpio(struct control_logic_data *ctl_data,
+static void set_common_gpio(struct control_logic_data *ctl_data,
 		     struct sensor_platform_data **pdata)
 {
 	int i;
@@ -548,7 +549,7 @@ void set_common_gpio(struct control_logic_data *ctl_data,
 					ctl_data->gpio[i].func);
 }
 
-int set_csi2(struct ipu_isys_subdev_info **sensor_sd,
+static int set_csi2(struct ipu_isys_subdev_info **sensor_sd,
 		unsigned int lanes,
 		unsigned int port)
 {
@@ -565,7 +566,7 @@ int set_csi2(struct ipu_isys_subdev_info **sensor_sd,
 	return 0;
 }
 
-void set_i2c(struct ipu_isys_subdev_info **sensor_sd,
+static void set_i2c(struct ipu_isys_subdev_info **sensor_sd,
 		struct device *dev,
 		const char sensor_name[I2C_NAME_SIZE],
 		unsigned int addr)
@@ -573,20 +574,20 @@ void set_i2c(struct ipu_isys_subdev_info **sensor_sd,
 	dev_info(dev, "IPU6 ACPI: kernel I2C BDF: %s, kernel I2C bus = %s",
 		dev_name(dev->parent->parent->parent), dev_name(dev->parent));
 	(*sensor_sd)->i2c.board_info.addr = addr;
-	strlcpy((*sensor_sd)->i2c.board_info.type, sensor_name, I2C_NAME_SIZE);
-	strlcpy((*sensor_sd)->i2c.i2c_adapter_bdf, dev_name(dev->parent->parent->parent),
+	strscpy((*sensor_sd)->i2c.board_info.type, sensor_name, I2C_NAME_SIZE);
+	strscpy((*sensor_sd)->i2c.i2c_adapter_bdf, dev_name(dev->parent->parent->parent),
 		sizeof((*sensor_sd)->i2c.i2c_adapter_bdf));
 }
 
-void set_serdes_sd_pdata(struct serdes_module_pdata **module_pdata, char sensor_name[I2C_NAME_SIZE],
-			unsigned int lanes)
+static void set_serdes_sd_pdata(struct serdes_module_pdata **module_pdata, char sensor_name[I2C_NAME_SIZE],
+			const char *hid_name, unsigned int lanes)
 {
 	/* general */
 	(*module_pdata)->lanes = lanes;
-	strlcpy((*module_pdata)->module_name, sensor_name, I2C_NAME_SIZE);
+	strscpy((*module_pdata)->module_name, sensor_name, I2C_NAME_SIZE);
 
 	/* TI960 and IMX390 specific */
-	if (!strcmp(sensor_name, IMX390_NAME)) {
+	if (!strcmp(sensor_name, IMX390_NAME) && !strcmp(hid_name, "INTC10C1")) {
 		(*module_pdata)->gpio_powerup_seq[0] = 0;
 		(*module_pdata)->gpio_powerup_seq[1] = 0x9;
 		(*module_pdata)->gpio_powerup_seq[2] = -1;
@@ -594,14 +595,35 @@ void set_serdes_sd_pdata(struct serdes_module_pdata **module_pdata, char sensor_
 		(*module_pdata)->module_flags = TI960_FL_POWERUP | TI960_FL_INIT_SER_CLK;
 		(*module_pdata)->fsin = 3;
 	}
+
+	/* TI960 and IMX390 specific */
+	if (!strcmp(sensor_name, IMX390_NAME) && !strcmp(hid_name, "INTC10CM")) {
+		(*module_pdata)->gpio_powerup_seq[0] = 0;
+		(*module_pdata)->gpio_powerup_seq[1] = 0xa;
+		(*module_pdata)->gpio_powerup_seq[2] = -1;
+		(*module_pdata)->gpio_powerup_seq[3] = -1;
+		(*module_pdata)->module_flags = TI960_FL_POWERUP | TI960_FL_INIT_SER_CLK;
+		(*module_pdata)->fsin = 0;
+	}
+
+	/* TI960 and ISX031 specific */
+	if (!strcmp(sensor_name, ISX031_NAME)) {
+		(*module_pdata)->gpio_powerup_seq[0] = 0x0;
+		(*module_pdata)->gpio_powerup_seq[1] = 0x08;
+		(*module_pdata)->gpio_powerup_seq[2] = 0X08;
+		(*module_pdata)->gpio_powerup_seq[3] = -1;
+		(*module_pdata)->module_flags = TI960_FL_POWERUP | TI960_FL_INIT_SER_CLK;
+		(*module_pdata)->fsin = 2;
+	}
 }
 
 #define PORT_NR 8
 
-int set_serdes_subdev(struct ipu_isys_subdev_info **serdes_sd,
+static int set_serdes_subdev(struct ipu_isys_subdev_info **serdes_sd,
 		struct device *dev,
 		struct serdes_platform_data **pdata,
 		char sensor_name[I2C_NAME_SIZE],
+		const char *hid_name,
 		unsigned int lanes,
 		unsigned int addr,
 		unsigned int subdev_port)
@@ -622,10 +644,10 @@ int set_serdes_subdev(struct ipu_isys_subdev_info **serdes_sd,
 			return -ENOMEM;
 		}
 
-		set_serdes_sd_pdata(&module_pdata[i], sensor_name, lanes);
+		set_serdes_sd_pdata(&module_pdata[i], sensor_name, hid_name, lanes);
 
 		/* board info */
-		strlcpy(serdes_sdinfo[i].board_info.type, sensor_name, I2C_NAME_SIZE);
+		strscpy(serdes_sdinfo[i].board_info.type, sensor_name, I2C_NAME_SIZE);
 		if (!strcmp(sensor_name, D457_NAME)) {
 			if (i == 0)
 				serdes_sdinfo[i].board_info.addr = serdes_info.sensor_map_addr;
@@ -658,14 +680,17 @@ int set_serdes_subdev(struct ipu_isys_subdev_info **serdes_sd,
 	return 0;
 }
 
-int set_pdata(struct ipu_isys_subdev_info **sensor_sd,
+static u8 suffix_offset = 1;
+static int set_pdata(struct ipu_isys_subdev_info **sensor_sd,
 		struct device *dev,
 		char sensor_name[I2C_NAME_SIZE],
+		const char *hid_name,
 		struct control_logic_data *ctl_data,
 		unsigned int port,
 		unsigned int lanes,
 		unsigned int addr,
 		unsigned int rx_port,
+		unsigned int deser_lanes,
 		bool is_dummy,
 		enum connection_type connect)
 {
@@ -682,8 +707,7 @@ int set_pdata(struct ipu_isys_subdev_info **sensor_sd,
 		if (port >= 0) {
 			pdata->suffix = port + SUFFIX_BASE + 1;
 			pr_info("IPU6 ACPI: create %s %c, on port %d",
-			sensor_name, pdata->suffix, port);
-
+				sensor_name, pdata->suffix, port);
 		} else
 			dev_err(dev, "INVALID MIPI PORT");
 
@@ -711,18 +735,24 @@ int set_pdata(struct ipu_isys_subdev_info **sensor_sd,
 		if (!strcmp(sensor_name, D457_NAME) && port >= 0) {
 			pdata->suffix = serdes_info.deser_num + SUFFIX_BASE + 1;
 			pr_info("IPU6 ACPI: create %s %c, on deserializer port %d",
-			sensor_name, pdata->suffix, serdes_info.deser_num);
-		} else if (port > 0) {
-			pdata->suffix = port + SUFFIX_BASE;
+				sensor_name, pdata->suffix, serdes_info.deser_num);
+		} else if (port >= 0) {
+			pdata->suffix = SUFFIX_BASE + suffix_offset++;
 			pr_info("IPU6 ACPI: create %s %c, on mipi port %d",
-			sensor_name, pdata->suffix, port);
+				sensor_name, pdata->suffix, port);
 		} else
 			pr_err("IPU6 ACPI: Invalid MIPI Port : %d", port);
 
-		if (!strcmp(sensor_name, IMX390_NAME))
+		if (!strcmp(sensor_name, IMX390_NAME) || !strcmp(sensor_name, ISX031_NAME))
 			set_ti960_gpio(ctl_data, &pdata);
-
-		set_serdes_subdev(sensor_sd, dev, &pdata, sensor_name, lanes, addr, rx_port);
+		if (!strcmp(sensor_name, ISX031_NAME)) {
+			pdata->link_freq_mbps = 1600;
+		} else if (!strcmp(sensor_name, IMX390_NAME)) {
+			pdata->link_freq_mbps = 1200;
+		}
+		pdata->deser_nlanes = deser_lanes;
+		pdata->ser_nlanes = lanes;
+		set_serdes_subdev(sensor_sd, dev, &pdata, sensor_name, hid_name, lanes, addr, rx_port);
 
 		(*sensor_sd)->i2c.board_info.platform_data = pdata;
 		pdata->deser_board_info = &(*sensor_sd)->i2c.board_info;
@@ -731,7 +761,7 @@ int set_pdata(struct ipu_isys_subdev_info **sensor_sd,
 	return 0;
 }
 
-void set_serdes_info(struct device *dev, char *sensor_name, const char *serdes_name,
+static void set_serdes_info(struct device *dev, char *sensor_name, const char *serdes_name,
 			struct sensor_bios_data *cam_data)
 {
 	int i;
@@ -743,7 +773,6 @@ void set_serdes_info(struct device *dev, char *sensor_name, const char *serdes_n
 	serdes_info.i2c_num = cam_data->i2c_num;
 
 	i = 1;
-
 	/* serializer mapped addr */
 	serdes_info.ser_map_addr = cam_data->i2c[i++].addr;
 	/* sensor mapped addr */
@@ -762,12 +791,15 @@ void set_serdes_info(struct device *dev, char *sensor_name, const char *serdes_n
 
 	if (!strcmp(sensor_name, IMX390_NAME))
 		serdes_info.phy_i2c_addr = IMX390_D3CM_I2C_ADDRESS;
+	else if (!strcmp(sensor_name, ISX031_NAME))
+		serdes_info.phy_i2c_addr = ISX031_I2C_ADDRESS;
 	else
 		serdes_info.phy_i2c_addr = 0;
 }
 
-int populate_dummy(struct device *dev,
+static int populate_dummy(struct device *dev,
 			char sensor_name[I2C_NAME_SIZE],
+			const char *hid_name,
 			struct sensor_bios_data *cam_data,
 			struct control_logic_data *ctl_data,
 			enum connection_type connect)
@@ -790,8 +822,8 @@ int populate_dummy(struct device *dev,
 
 	set_i2c(&dummy, dev, sensor_name, addr_dummy);
 
-	ret = set_pdata(&dummy, dev, sensor_name, ctl_data, cam_data->pprval,
-		cam_data->lanes, addr_dummy, 0, true, connect);
+	ret = set_pdata(&dummy, dev, sensor_name, hid_name, ctl_data, cam_data->pprval,
+		cam_data->lanes, addr_dummy, 0, 0, true, connect);
 	if (ret) {
 		kfree(dummy);
 		return ret;
@@ -802,13 +834,14 @@ int populate_dummy(struct device *dev,
 	return 0;
 }
 
-int populate_sensor_pdata(struct device *dev,
+static int populate_sensor_pdata(struct device *dev,
 			struct ipu_isys_subdev_info **sensor_sd,
 			char sensor_name[I2C_NAME_SIZE],
 			struct sensor_bios_data *cam_data,
 			struct control_logic_data *ctl_data,
 			enum connection_type connect,
-			const char *serdes_name)
+			const char *serdes_name,
+			const char *hid_name)
 {
 	int ret;
 
@@ -873,9 +906,9 @@ int populate_sensor_pdata(struct device *dev,
 	}
 
 	/* Use last I2C device */
-	ret = set_pdata(sensor_sd, dev, sensor_name, ctl_data, cam_data->link,
+	ret = set_pdata(sensor_sd, dev, sensor_name, hid_name, ctl_data, cam_data->link,
 		cam_data->lanes, cam_data->i2c[cam_data->i2c_num - 1].addr,
-		cam_data->pprunit, false, connect);
+		cam_data->pprunit, cam_data->pprval, false, connect);
 
 	if (ret)
 		return ret;
@@ -885,7 +918,7 @@ int populate_sensor_pdata(struct device *dev,
 	/* Lontium specific */
 	if (!strcmp(sensor_name, LT6911UXC_NAME) || !strcmp(sensor_name, LT6911UXE_NAME)) {
 		if (cam_data->pprval != cam_data->link) {
-			ret = populate_dummy(dev, sensor_name, cam_data, ctl_data, connect);
+			ret = populate_dummy(dev, sensor_name, hid_name, cam_data, ctl_data, connect);
 			if (ret)
 				return ret;
 		}
@@ -898,7 +931,7 @@ int get_sensor_pdata(struct i2c_client *client,
 			struct ipu_camera_module_data *data,
 			struct ipu_i2c_helper *helper,
 			void *priv, size_t size,
-			enum connection_type connect, const char *serdes_name)
+			enum connection_type connect, const char *serdes_name, const char *hid_name)
 {
 	struct sensor_bios_data *cam_data;
 	struct control_logic_data *ctl_data;
@@ -946,7 +979,7 @@ int get_sensor_pdata(struct i2c_client *client,
 
 	/* populate pdata */
 	rval = populate_sensor_pdata(&client->dev, &sensor_sd,
-				client->name, cam_data, ctl_data, connect, serdes_name);
+				client->name, cam_data, ctl_data, connect, serdes_name, hid_name);
 	if (rval) {
 		kfree(sensor_sd);
 		kfree(cam_data);
