@@ -23,6 +23,8 @@
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#include <linux/dma-buf.h>
+
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_damage_helper.h>
 #include <drm/drm_fourcc.h>
@@ -237,6 +239,18 @@ static int virtio_gpu_check_plane_scaling(struct drm_plane_state *state,
 	return 0;
 }
 
+#define I915_AG_DMABUF_ATTACHMENT_CURRENT_VERSION		(1)
+#define I915_AG_DMABUF_ATTACHMENT_LMEM				(1lu << 0)
+
+struct i915_ag_dmabuf_attachment_priv {
+	uint32_t version;
+	union {
+		struct {
+			uint32_t flags;
+		} v1;
+	} shared;
+};
+
 static int virtio_gpu_plane_atomic_check(struct drm_plane *plane,
 					 struct drm_atomic_state *state)
 {
@@ -244,6 +258,7 @@ static int virtio_gpu_plane_atomic_check(struct drm_plane *plane,
 										 plane);
 	struct drm_device *dev = plane->dev;
 	struct virtio_gpu_device *vgdev = dev->dev_private;
+	struct i915_ag_dmabuf_attachment_priv *i915_priv = NULL;
 	bool is_cursor = 1;
 	struct virtio_gpu_output *output = NULL;
 	output = drm_crtc_to_virtio_gpu_output(new_plane_state->crtc);
@@ -263,6 +278,44 @@ static int virtio_gpu_plane_atomic_check(struct drm_plane *plane,
 					       new_plane_state->crtc);
 	if (IS_ERR(crtc_state))
                 return PTR_ERR(crtc_state);
+
+	/* Ensure lmem objects from i915_ag are attached to dGPU backing CRTC */
+	if (vgdev->output_cap_mask & (1lu << drm_crtc_index(new_plane_state->crtc))) {
+		for (int i = 0; i < DRM_FORMAT_MAX_PLANES; ++i) {
+			struct drm_gem_object *obj = new_plane_state->fb->obj[i];
+			if (!obj)
+				break;
+
+			if (!obj->import_attach)
+				return -EINVAL;
+
+#define I915_AG_MODULE_NAME "i915_ag"
+			if (strncmp(obj->import_attach->dmabuf->exp_name, I915_AG_MODULE_NAME,
+				    strlen(I915_AG_MODULE_NAME)) != 0) {
+				drm_dbg(vgdev->ddev, "cannot use non-i915_ag "
+					"buffer for crtc %u, driver name %s\n",
+					drm_crtc_index(new_plane_state->crtc),
+					obj->dev->driver->name);
+				return -EINVAL;
+			}
+#undef I915_AG_MODULE_NAME
+
+			i915_priv = obj->import_attach->priv;
+			if (!i915_priv) {
+				drm_dbg(vgdev->ddev, "unsupported i915_ag dmabuf attachment\n");
+				return -EINVAL;
+			}
+			if (i915_priv->version != I915_AG_DMABUF_ATTACHMENT_CURRENT_VERSION) {
+				drm_dbg(vgdev->ddev, "unsupported i915_ag dmabuf attachment "
+					"version %u\n", i915_priv->version);
+				return -EINVAL;
+			}
+			if (!(i915_priv->shared.v1.flags & I915_AG_DMABUF_ATTACHMENT_LMEM)) {
+				drm_dbg(vgdev->ddev, "not local memory from i915_ag\n");
+				return -EINVAL;
+			}
+		}
+	}
 
 	if(vgdev->has_scaling && (new_plane_state->fb->format->format != DRM_FORMAT_C8)) {
 		min_scale = 1;
