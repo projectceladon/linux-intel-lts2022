@@ -58,10 +58,10 @@ static struct regmap_config config16 = {
 };
 
 /*
- * 1920x1080 UYVY
+ * 16000x1300 UYVY
  */
 static s64 max96716_query_sub_stream[] = {
-	0x001e07800438200f, 0x011e07800438200f,
+	0x001e06400514200f, 0x011e06400514200f,
 	0, 0,
 };
 
@@ -83,12 +83,14 @@ static unsigned int mbus_code_to_mipi(u32 code)
  * 800MBps
  * 2lanes
  * enable PHY 0/1/2/3
+ * override bpp_vc_dty
  */
 static const struct max96716_reg csi_phy[] = {
 	{0x0313, 0x00},
 	{0x0330, 0x04},
 	{0x044a, 0x50},
-	{0x0320, 0x28},
+	{0x0320, 0x68},
+	{0x031d, 0xa8},
 };
 static const struct max96716_reg_list mipi_phy_setting = {
 	.num_of_regs = ARRAY_SIZE(csi_phy),
@@ -96,13 +98,22 @@ static const struct max96716_reg_list mipi_phy_setting = {
 };
 
 /*
- * link a pipe z -> pipe y
- * link b pipe z -> pipe z
+ * link a pipe z -> pipe y, vc 0, dt 0x1e, bpp 8
+ * link b pipe x -> pipe z, vc 1, dt 0x1e, bpp 8
  * enable pipe y/z
+ * muxed mode enable
  */
 static const struct max96716_reg video_pipe_sel[] = {
-	{0x0161, 0x32},
+	{0x0161, 0x22},
 	{0x0160, 0x03},
+	{0x0322, 0xf0},
+	{0x0314, 0x00},
+	{0x0315, 0x00},
+	{0x0316, 0x40},
+	{0x0317, 0x7e},
+	{0x0318, 0x02},
+	{0x0319, 0x48},
+	{0x031a, 0x00},
 };
 static const struct max96716_reg_list video_pipe_setting = {
 	.num_of_regs = ARRAY_SIZE(video_pipe_sel),
@@ -186,13 +197,21 @@ static const struct max96716_reg_list rlms_conf = {
  */
 static const struct max96716_reg link_ab_default[] = {
 	/* disable local CC */
-	{0x0001, 0xe4},
-	{0x0318, 0x5E},
-	{0x0302, 0x10},
-	{0x1417, 0x00},
-	{0x1432, 0x7F},
-	{0x0010, 0x31},
-	{0xffff, 0x64},
+	//{0x0001, 0xe4},
+	//{0x0318, 0x5E},
+	//{0x0302, 0x10},
+	//{0x1417, 0x00},
+	//{0x1432, 0x7F},
+	//{0x0010, 0x31},
+	//{0xffff, 0x64},
+	{0x0100, 0xF2},
+	{0x0101, 0x4A},
+	{0x0002, 0x13},
+	{0x0007, 0x07},
+	{0x03F0, 0x51},
+	{0x03F1, 0x05},
+	{0x02D6, 0x00},
+	{0x02C1, 0x10},
 };
 
 static const struct max96716_reg_list link_setting = {
@@ -519,8 +538,8 @@ static int max96716_set_fmt(struct v4l2_subdev *sd,
 
 static void max96716_init_format(struct v4l2_mbus_framefmt *fmt)
 {
-	fmt->width = 1920;
-	fmt->height = 1080;
+	fmt->width = 1600;
+	fmt->height = 1300;
 	fmt->code = MEDIA_BUS_FMT_UYVY8_1X16;
 	fmt->colorspace = V4L2_COLORSPACE_SRGB;
 	fmt->ycbcr_enc = V4L2_YCBCR_ENC_DEFAULT;

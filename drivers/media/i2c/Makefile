@@ -153,3 +153,4 @@ obj-$(CONFIG_VIDEO_D4XX) += d4xx.o
 obj-$(CONFIG_VIDEO_MAX96712) += max96712.o
 obj-$(CONFIG_VIDEO_MAX96716) += max96716.o
 obj-$(CONFIG_VIDEO_MAX96717) += max96717f_dummy.o
+obj-$(CONFIG_VIDEO_MAX9295A) += max9295a_dummy.o

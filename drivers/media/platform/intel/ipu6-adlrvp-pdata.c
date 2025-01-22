@@ -845,13 +845,13 @@ static struct max9671x_subdev_platform_data max96716_subdev_pdata_2 = {
 static struct max9671x_subdev_info max96716_subdevs_1[] = {
 	{
 		.board_info = {
-			.type = "max96717f_dummy",
+			.type = "max9295a_dummy",
 			.addr = 0x47,
 			.platform_data = &max96716_subdev_pdata_1,
 		},
 		.rx_port = 1,
-		.phy_i2c_addr = 0x42,
-		.alias_addr = 0x44,
+		.phy_i2c_addr = 0x40,
+		.alias_addr = 0x47,
 		.ser_type = MAX_SER_96717F,
 	},
 };
@@ -864,7 +864,7 @@ static struct max9671x_subdev_info max96716_subdevs_2[] = {
 		},
 		.rx_port = 0,
 		.phy_i2c_addr = 0x42,
-		.alias_addr = 0x45,
+		.alias_addr = 0x48,
 		.ser_type = MAX_SER_96717F,
 		.suffix = 'f',
 	},
