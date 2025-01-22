@@ -1687,6 +1687,12 @@ config VIDEO_MAX96717
     help
       This is a Video4Linux2 driver for MAX96717 serializer.
 
+config VIDEO_MAX9295A
+    depends on I2C
+    tristate "MAX9295A dummy sensor"
+    help
+      This is a Video4Linux2 sensor-level driver for MAX9295A dummy sensor.
+
 endmenu
 
 endif # VIDEO_DEV
