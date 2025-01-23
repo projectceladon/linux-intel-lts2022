@@ -152,5 +152,7 @@ obj-$(CONFIG_VIDEO_AR0234) += ar0234.o
 obj-$(CONFIG_VIDEO_D4XX) += d4xx.o
 obj-$(CONFIG_VIDEO_MAX96712) += max96712.o
 obj-$(CONFIG_VIDEO_MAX96716) += max96716.o
+obj-$(CONFIG_VIDEO_MAX96724) += max96724.o
 obj-$(CONFIG_VIDEO_MAX96717) += max96717f_dummy.o
 obj-$(CONFIG_VIDEO_MAX9295A) += max9295a_dummy.o
+obj-$(CONFIG_VIDEO_MAX9295E) += max9295e_dummy.o
