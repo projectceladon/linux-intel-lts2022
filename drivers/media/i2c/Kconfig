@@ -1681,6 +1681,13 @@ config VIDEO_MAX96716
     help
       This is a Video4Linux2 driver for MAX96716 deserializer.
 
+config VIDEO_MAX96724
+    depends on I2C
+    tristate "MAX96724 deserializer driver"
+        select MAX96724
+    help
+      This is a Video4Linux2 driver for MAX96724 deserializer.
+
 config VIDEO_MAX96717
     depends on I2C
     tristate "MAX96717 serializer driver"
@@ -1692,6 +1699,12 @@ config VIDEO_MAX9295A
     tristate "MAX9295A dummy sensor"
     help
       This is a Video4Linux2 sensor-level driver for MAX9295A dummy sensor.
+
+config VIDEO_MAX9295E
+    depends on I2C
+    tristate "MAX9295E dummy sensor"
+    help
+      This is a Video4Linux2 sensor-level driver for MAX9295E dummy sensor.
 
 endmenu
 
