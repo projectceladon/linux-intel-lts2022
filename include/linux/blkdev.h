@@ -189,7 +189,7 @@ struct gendisk {
 	unsigned int		nr_zones;
 	unsigned int		max_open_zones;
 	unsigned int		max_active_zones;
-	unsigned long		*conv_zones_bitmap;
+	unsigned long __rcu	*conv_zones_bitmap;
 	unsigned long		*seq_zones_wlock;
 #endif /* CONFIG_BLK_DEV_ZONED */
 

@@ -613,7 +613,6 @@ int blk_revalidate_disk_zones(struct gendisk *disk,
 	blk_mq_unfreeze_queue(q);
 
 	kfree(args.seq_zones_wlock);
-	kfree(args.conv_zones_bitmap);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(blk_revalidate_disk_zones);
