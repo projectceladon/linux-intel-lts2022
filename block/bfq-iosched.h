@@ -768,6 +768,12 @@ struct bfq_data {
 	 */
 	unsigned int word_depths[2][2];
 	unsigned int full_depth_shift;
+
+	/*
+	 * Number of independent actuators. This is equal to 1 in
+	 * case of single-actuator drives.
+	*/
+	unsigned int num_actuators;
 };
 
 enum bfqq_state_flags {
