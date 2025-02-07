@@ -42,11 +42,11 @@
 enum ipu_version ipu_ver;
 EXPORT_SYMBOL(ipu_ver);
 
-static int isys_freq_override = -1;
+static int isys_freq_override = 400;
 module_param(isys_freq_override, int, 0660);
 MODULE_PARM_DESC(isys_freq_override, "override isys freq default value");
 
-static int psys_freq_override = -1;
+static int psys_freq_override = 375;
 module_param(psys_freq_override, int, 0660);
 MODULE_PARM_DESC(psys_freq_override, "override psys freq default value");
 
