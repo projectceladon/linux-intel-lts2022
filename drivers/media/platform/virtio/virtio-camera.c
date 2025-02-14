@@ -228,6 +228,7 @@ static int vcam_vq_request(struct virtio_camera_video *vnode,
 	return ret;
 }
 
+static int g_open_count = 0;
 int vcam_v4l2_fh_open(struct file *filp)
 {
 	struct virtio_camera_video *vnode;
@@ -236,6 +237,8 @@ int vcam_v4l2_fh_open(struct file *filp)
 
 	vnode = video_drvdata(filp);
 
+	g_open_count++;
+	pr_warn("virtio-camera: vnode%d opened g_open_count = %d times.\n", vnode->idx, g_open_count);
 	vcam_req = virtio_camera_create_req(VIRTIO_CAMERA_CMD_FILE_OPEN);
 	if (unlikely(vcam_req == NULL)) {
 		pr_err("virtio-camera: vnode%d fail to init open-req, no mem.\n", vnode->idx);
@@ -255,17 +258,22 @@ err_free:
 	return err;
 }
 
+static int	g_close_count = 0;
 int vcam_v4l2_fh_release(struct file *filp)
 {
 	struct virtio_camera_video *vnode;
 	struct virtio_camera_ctrl_req *vcam_req;
 	int err;
 
+	g_close_count++;
+	pr_warn("virtio-camera: close Enter, g_close_count = %d.\n", vnode->idx, g_close_count);
+
 	err = vb2_fop_release(filp);
 	if (err)
 		return err;
 
 	vnode = video_drvdata(filp);
+	pr_warn("virtio-camera: vnode%d close call BE, g_close_count = %d.\n", vnode->idx, g_close_count);
 	vcam_req = virtio_camera_create_req(VIRTIO_CAMERA_CMD_FILE_CLOSE);
 	if (unlikely(vcam_req == NULL)) {
 		pr_err("virtio-camera: vnode%d fail to init close-req, no mem.\n", vnode->idx);
