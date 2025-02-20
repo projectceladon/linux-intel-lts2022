@@ -122,6 +122,11 @@ void virtio_gpu_vblank_ack(struct virtqueue *vq)
 	if (!vgdev->has_flip_sequence)
 		return;
 
+	if (&vgdev->vblank[target].first_commit) {
+		complete(&vgdev->vblank[target].notify);
+		vgdev->vblank[target].first_commit = false;
+	}
+
 	struct drm_pending_vblank_event *e = xchg(&vgdev->cache_event[target], NULL);
 	if (!e)
 		return;

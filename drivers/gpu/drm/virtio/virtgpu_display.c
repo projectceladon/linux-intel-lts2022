@@ -54,6 +54,12 @@ static int virtio_irq_enable_vblank(struct drm_crtc *crtc)
 	struct drm_device *dev = crtc->dev;
 	struct virtio_gpu_device *vgdev = dev->dev_private;
 	struct virtio_gpu_output *output = drm_crtc_to_virtio_gpu_output(crtc);
+	const unsigned pipe = drm_crtc_index(crtc);
+
+	if (vgdev->has_flip_sequence) {
+		init_completion(&vgdev->vblank[pipe].notify);
+		vgdev->vblank[pipe].first_vblank = true;
+	}
 
 	do {
 		virtio_gpu_vblank_poll_arm(vgdev->vblank[output->index].vblank.vq);
@@ -143,6 +149,8 @@ static void virtio_gpu_crtc_atomic_begin(struct drm_crtc *crtc,
 	struct drm_device *drm = crtc->dev;
 	const unsigned pipe = drm_crtc_index(crtc);
 	struct drm_pending_vblank_event *old_e, *e = crtc->state->event;
+	struct drm_vblank_crtc *vblank = &drm->vblank[pipe];
+	int ret = 0;
 
 	if (!vgdev->has_vblank || !crtc->state->event)
 		return;
@@ -163,6 +171,14 @@ static void virtio_gpu_crtc_atomic_begin(struct drm_crtc *crtc,
 		drm_crtc_arm_vblank_event(crtc, e);
 		spin_unlock_irq(&drm->event_lock);
 	} else {
+		if (vgdev->vblank[pipe].first_vblank) {
+			ret = wait_for_completion_interruptible_timeout(&vgdev->vblank[pipe].notify,
+								nsecs_to_jiffies(vblank->framedur_ns));
+			if (ret <= 0)
+				DRM_ERROR("atomic begin wait page flip time out for pipe:%d\n", pipe);
+			vgdev->vblank[pipe].first_vblank = false;
+
+		}
 		crtc->state->event->sequence =
 			atomic64_read(&vgdev->flip_sequence[pipe]) + 1;
 		old_e = xchg(&vgdev->cache_event[pipe], crtc->state->event);

@@ -239,6 +239,8 @@ struct virtio_gpu_drv_cap_cache {
 struct virtio_gpu_vblank {
 	struct virtio_gpu_queue vblank;
 	uint32_t buf[4];
+	struct completion notify;
+	bool first_vblank;
 };
 
 static inline bool drm_vblank_passed(u64 seq, u64 ref)
