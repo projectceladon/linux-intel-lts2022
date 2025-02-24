@@ -23,6 +23,13 @@
 #include <net/xdp.h>
 #include <net/net_failover.h>
 
+#include <linux/delay.h> 
+#include <linux/skbuff.h>
+#include <linux/ip.h>
+#include <linux/icmp.h>
+#include <linux/ipv6.h>
+#include <linux/icmpv6.h>
+
 static int napi_weight = NAPI_POLL_WEIGHT;
 module_param(napi_weight, int, 0444);
 
@@ -138,7 +145,84 @@ struct send_queue {
 
 	/* Record whether sq is in reset state. */
 	bool reset;
+
+	/* Record whether sq is in virtqueue notify */
+       bool in_notify;
 };
+
+// Define a structure to hold the virtqueue notify work data
++struct notify_work {
+       struct work_struct work;
+       struct send_queue *sq;
+};
+
+// Work function to handle virtqueue notification
+static void notify_work_func(struct work_struct *work) {
+
+       struct notify_work *notify_work = container_of(work, struct notify_work, work);
+       struct virtqueue * vq = notify_work->sq->vq;
+
+       // Perform the virtqueue notification
+       if(virtqueue_notify(vq)) {
+       		u64_stats_update_begin(&notify_work->sq->stats.syncp);
+       		notify_work->sq->stats.kicks++;
+       		u64_stats_update_end(&notify_work->sq->stats.syncp);
+       }
+
+       udelay(100);
+       notify_work->sq->in_notify = false;
+       
+       if(virtqueue_notify(vq)) {
+       		u64_stats_update_begin(&notify_work->sq->stats.syncp);
+       		notify_work->sq->stats.kicks++;
+       		u64_stats_update_end(&notify_work->sq->stats.syncp);
+       }
+
+       // Free the work structure
+       kfree(notify_work);
+}
+
+void schedule_notify_work(struct send_queue *sq) {
+       struct notify_work *work;
+       
+       work = kmalloc(sizeof(struct notify_work), GFP_ATOMIC);
+       if (!work) {
+           pr_err("Failed to allocate memory for notify work\n");
+           return;
+       }
+
+       // Initialize the work structure
+       INIT_WORK(&work->work, notify_work_func);
+       work->sq = sq;
+       // Schedule the work item
+       schedule_work(&work->work);
+}
+
+
+static inline bool is_ping_packet(struct sk_buff *skb) {
+       // Check if the packet is IPv4
+       if (skb->protocol == htons(ETH_P_IP)) {
+           struct iphdr *ip_header = ip_hdr(skb);
+           if (ip_header->protocol == IPPROTO_ICMP) {
+               struct icmphdr *icmp_header = icmp_hdr(skb);
+               if (icmp_header->type == ICMP_ECHO) {
+                   return true;
+               }
+           }
+       }
+       // Check if the packet is IPv6
+       else if (skb->protocol == htons(ETH_P_IPV6)) {
+           struct ipv6hdr *ipv6_header = ipv6_hdr(skb);
+           if (ipv6_header->nexthdr == IPPROTO_ICMPV6) {
+               struct icmp6hdr *icmp6_header = (struct icmp6hdr *)(skb_transport_header(skb) + sizeof(struct ipv6hdr));
+               if (icmp6_header->icmp6_type == ICMPV6_ECHO_REQUEST) {
+                   return true;
+               }
+           }
+       }
+       return false;
+}
+    
 
 /* Internal representation of a receive virtqueue */
 struct receive_queue {
@@ -1922,11 +2006,18 @@ static netdev_tx_t start_xmit(struct sk_buff *skb, struct net_device *dev)
 		}
 	}
 
-	if (kick || netif_xmit_stopped(txq)) {
-		if (virtqueue_kick_prepare(sq->vq) && virtqueue_notify(sq->vq)) {
-			u64_stats_update_begin(&sq->stats.syncp);
-			sq->stats.kicks++;
-			u64_stats_update_end(&sq->stats.syncp);
+	if ((kick || netif_xmit_stopped(txq)) && virtqueue_kick_prepare(sq->vq)) {
+		if(is_ping_packet(skb)) {
+			if (virtqueue_notify(sq->vq)) {
+				u64_stats_update_begin(&sq->stats.syncp);
+				sq->stats.kicks++;
+				u64_stats_update_end(&sq->stats.syncp);
+			}
+		} else {
+			if(!sq->in_notify) {
+			        sq->in_notify = true;
+			        schedule_notify_work(sq);
+			}
 		}
 	}
 
