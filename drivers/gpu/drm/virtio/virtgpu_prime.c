@@ -172,6 +172,9 @@ struct drm_gem_object *virtgpu_gem_prime_import(struct drm_device *dev,
 		return ERR_PTR(-EINVAL);
 	attach = ____dma_buf_dynamic_attach(dma_buf, attach_dev, NULL, NULL,
 					    vgdev->has_allow_p2p);
+	attach = ____dma_buf_dynamic_attach(dma_buf, attach_dev,
+					DMA_BUF_DRIVER_TYPE_ID_VIRTIO_GPU,
+					0, NULL, NULL, vgdev->has_allow_p2p);
 	if (IS_ERR(attach))
 		return ERR_CAST(attach);
 
