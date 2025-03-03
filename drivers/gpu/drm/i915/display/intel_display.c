@@ -781,7 +781,8 @@ intel_get_crtc_new_encoder(const struct intel_atomic_state *state,
 			continue;
 
 		encoder = to_intel_encoder(connector_state->best_encoder);
-		num_encoders++;
+		if (connector->connector_type != DRM_MODE_CONNECTOR_WRITEBACK)
+			num_encoders++;
 	}
 
 	drm_WARN(state->base.dev, num_encoders != 1,

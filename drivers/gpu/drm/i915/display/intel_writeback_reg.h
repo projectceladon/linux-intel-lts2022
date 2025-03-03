@@ -46,6 +46,13 @@
 
 #define WD_FRAME_NUMBER_MASK		15
 
+#define TRANS_HTOTAL_WD0		_MMIO(0x6e000)
+#define TRANS_VTOTAL_WD0		_MMIO(0x6e00c)
+
+#define TRANS_CONF_WD0			_MMIO(0x7e008)
+#define TRANS_CONF_WD_ENABLE		(1<<31)
+#define TRANS_CONF_WD_ENABLED		(1<<30)
+
 #define _WD_STRIDE_0			0x6e510
 #define _WD_STRIDE_1			0x6ed10
 #define WD_STRIDE(tc)			_MMIO_WD(tc,\

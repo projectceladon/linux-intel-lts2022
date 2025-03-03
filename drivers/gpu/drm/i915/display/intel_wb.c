@@ -13,6 +13,7 @@
 #include "intel_fb_pin.h"
 #include "intel_de.h"
 #include "intel_writeback_reg.h"
+#include "intel_display_trace.h"
 
 #define CSC_MAX_COEFF_REG_COUNT    6
 #define CSC_MAX_OFFSET_COUNT       3
@@ -21,6 +22,68 @@ enum {
 	WD_CAPTURE_4_PIX,
 	WD_CAPTURE_2_PIX,
 } wb_capture_format;
+
+/* copy from drm_edid.c */
+static const struct drm_display_mode drm_dmt_modes[] = {
+	/* 640x480@60Hz */
+	{ DRM_MODE("640x480", DRM_MODE_TYPE_DRIVER, 25175, 640, 656,
+		   752, 800, 0, 480, 489, 492, 525, 0,
+		   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_NVSYNC) },
+	/* 800x600@60Hz */
+	{ DRM_MODE("800x600", DRM_MODE_TYPE_DRIVER, 40000, 800, 840,
+		   968, 1056, 0, 600, 601, 605, 628, 0,
+		   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC) },
+	/* 1024x768@60Hz */
+	{ DRM_MODE("1024x768", DRM_MODE_TYPE_DRIVER, 65000, 1024, 1048,
+		   1184, 1344, 0, 768, 771, 777, 806, 0,
+		   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_NVSYNC) },
+	/* 1280x768@60Hz */
+	{ DRM_MODE("1280x768", DRM_MODE_TYPE_DRIVER, 79500, 1280, 1344,
+		   1472, 1664, 0, 768, 771, 778, 798, 0,
+		   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
+	/* 1280x768@85Hz */
+	{ DRM_MODE("1280x768", DRM_MODE_TYPE_DRIVER, 117500, 1280, 1360,
+		   1496, 1712, 0, 768, 771, 778, 809, 0,
+		   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
+	/* 1280x1024@60Hz */
+	{ DRM_MODE("1280x1024", DRM_MODE_TYPE_DRIVER, 108000, 1280, 1328,
+		   1440, 1688, 0, 1024, 1025, 1028, 1066, 0,
+		   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC) },
+	/* 1280x1024@85Hz */
+	{ DRM_MODE("1280x1024", DRM_MODE_TYPE_DRIVER, 157500, 1280, 1344,
+		   1504, 1728, 0, 1024, 1025, 1028, 1072, 0,
+		   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC) },
+	/* 1400x1050@60Hz */
+	{ DRM_MODE("1400x1050", DRM_MODE_TYPE_DRIVER, 121750, 1400, 1488,
+		   1632, 1864, 0, 1050, 1053, 1057, 1089, 0,
+		   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
+	/* 1400x1050@85Hz */
+	{ DRM_MODE("1400x1050", DRM_MODE_TYPE_DRIVER, 179500, 1400, 1504,
+		   1656, 1912, 0, 1050, 1053, 1057, 1105, 0,
+		   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
+	/* 1600x1200@60Hz */
+	{ DRM_MODE("1600x1200", DRM_MODE_TYPE_DRIVER, 162000, 1600, 1664,
+		   1856, 2160, 0, 1200, 1201, 1204, 1250, 0,
+		   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC) },
+	/* 1600x1200@85Hz */
+	{ DRM_MODE("1600x1200", DRM_MODE_TYPE_DRIVER, 229500, 1600, 1664,
+		   1856, 2160, 0, 1200, 1201, 1204, 1250, 0,
+		   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC) },
+	/* 0x52 - 1920x1080@60Hz */
+	{ DRM_MODE("1920x1080", DRM_MODE_TYPE_DRIVER|DRM_MODE_TYPE_PREFERRED,
+	       148500, 1920, 2008,
+		   2052, 2200, 0, 1080, 1084, 1089, 1125, 0,
+		   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_NVSYNC) },
+	/* 1920x1200@60Hz RB */
+	{ DRM_MODE("1920x1200", DRM_MODE_TYPE_DRIVER,
+		   154000, 1920, 1968,
+		   2000, 2080, 0, 1200, 1203, 1209, 1235, 0,
+		   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_NVSYNC) },
+	/* 1920x1200@60Hz */
+	{ DRM_MODE("1920x1200", DRM_MODE_TYPE_DRIVER, 193250, 1920, 2056,
+		   2256, 2592, 0, 1200, 1203, 1209, 1245, 0,
+		   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
+};
 
 struct drm_writeback_job
 *intel_get_writeback_job_from_queue(struct intel_wb *intel_wb)
@@ -56,9 +119,6 @@ static const u32 wb_fmts[] = {
 static int intel_wb_get_format(int pixel_format)
 {
 	int wb_format = -EINVAL;
-
-	DRM_INFO("Get format pixel format %x\n",
-		  pixel_format);
 
 	switch (pixel_format) {
 	case DRM_FORMAT_XBGR8888:
@@ -174,7 +234,25 @@ intel_wb_mode_valid(struct drm_connector *connector,
 
 static int intel_wb_get_modes(struct drm_connector *connector)
 {
-	return 0;
+	int i;
+	int num_modes = 0;
+
+	connector->status = connector_status_disconnected;
+
+	for (i = 0; i < ARRAY_SIZE(drm_dmt_modes); i++) {
+		struct drm_display_mode *nmode;
+
+		nmode = drm_mode_duplicate(connector->dev,
+						&drm_dmt_modes[i]);
+		if (nmode) {
+			drm_mode_probed_add(connector, nmode);
+			num_modes++;
+		}
+		else
+			DRM_ERROR("duplicate mode error!\n");
+	}
+
+	return num_modes;
 }
 
 static void intel_wb_get_config(struct intel_encoder *encoder,
@@ -231,7 +309,6 @@ static bool intel_wb_get_hw_state(struct intel_encoder *encoder,
 	struct intel_crtc *wb_crtc = intel_wb->wb_crtc;
 	intel_wakeref_t wakeref;
 	u32 tmp;
-	drm_dbg_kms(&dev_priv->drm, "intel_wb_get_hw_state\n");
 
 	if (!wb_crtc)
 		return false;
@@ -245,14 +322,14 @@ static bool intel_wb_get_hw_state(struct intel_encoder *encoder,
 	tmp = intel_de_read(dev_priv, TRANSCONF(intel_wb->trans));
 	ret = tmp & WD_TRANS_ACTIVE;
 	if (ret) {
-		drm_dbg_kms(&dev_priv->drm, "intel_wb_get_hw_state WD Transcode active\n");
+		drm_dbg_kms(&dev_priv->drm, "WD_ intel_wb_get_hw_state WD Transcode active\n");
 		*pipe = wb_crtc->pipe;
 		return true;
 	}
 
 out:
 	intel_display_power_put(dev_priv, encoder->power_domain, wakeref);
-	drm_dbg_kms(&dev_priv->drm, "intel_wb_get_hw_state WD Transcode active fail\n");
+	drm_dbg_kms(&dev_priv->drm, "WD_ intel_wb_get_hw_state WD Transcode active fail\n");
 	return false;
 }
 
@@ -388,7 +465,7 @@ void intel_wb_init(struct drm_i915_private *i915, enum transcoder trans)
 	encoder->compute_config = intel_wb_compute_config;
 	encoder->get_hw_state = intel_wb_get_hw_state;
 	encoder->type = INTEL_OUTPUT_WB;
-	encoder->cloneable = 0;
+	encoder->cloneable = 1 << INTEL_OUTPUT_DDI;
 	encoder->pipe_mask = ~0;
 	encoder->power_domain = POWER_DOMAIN_TRANSCODER_B;
 	encoder->get_power_domains = intel_wb_get_power_domains;
@@ -512,8 +589,9 @@ static int intel_wb_setup_transcoder(struct intel_wb *intel_wb,
 	int ret;
 	u32 stride, tmp;
 	u16 hactive, vactive;
+
 	drm_dbg_kms(&dev_priv->drm,
-			"intel_wb_setup_transcoder start\n");
+			"WD_ intel_wb_setup_transcoder pipe =%d start\n", pipe);
 
 	fb = job->fb;
 	wb_fb_obj = fb->obj[0];
@@ -570,20 +648,20 @@ static int intel_wb_setup_transcoder(struct intel_wb *intel_wb,
 
 	hactive = pipe_config->uapi.mode.hdisplay;
 	vactive = pipe_config->uapi.mode.vdisplay;
-	tmp = intel_de_read(dev_priv, TRANS_HTOTAL(intel_wb->trans));
-	drm_dbg_kms(&dev_priv->drm, "HTOTAL: 0x%05x, tmp: 0x%08x\n", TRANS_HTOTAL(intel_wb->trans).reg, tmp);
+	tmp = intel_de_read(dev_priv, TRANS_HTOTAL_WD0);
+	drm_dbg_kms(&dev_priv->drm, "HTOTAL: 0x%05x, tmp: 0x%08x\n", TRANS_HTOTAL_WD0.reg, tmp);
 	drm_dbg_kms(&dev_priv->drm, "hactive: 0x%08x\n", hactive);
 
-	tmp = intel_de_read(dev_priv, TRANS_VTOTAL(intel_wb->trans));
-	drm_dbg_kms(&dev_priv->drm, "VTOTAL: 0x%05x, tmp: 0x%08x\n", TRANS_VTOTAL(intel_wb->trans).reg, tmp);
+	tmp = intel_de_read(dev_priv, TRANS_VTOTAL_WD0);
+	drm_dbg_kms(&dev_priv->drm, "VTOTAL: 0x%05x, tmp: 0x%08x\n", TRANS_VTOTAL_WD0.reg, tmp);
 	drm_dbg_kms(&dev_priv->drm, "vactive: 0x%08x\n", vactive);
 
 	/* minimum hactive as per bspec: 64 pixels */
 	if (hactive < 64)
 		drm_err(&dev_priv->drm, "hactive is less then 64 pixels\n");
 
-	intel_de_write(dev_priv, TRANS_HTOTAL(intel_wb->trans), hactive - 1);
-	intel_de_write(dev_priv, TRANS_VTOTAL(intel_wb->trans), vactive - 1);
+	intel_de_write(dev_priv, TRANS_HTOTAL_WD0, hactive - 1);
+	intel_de_write(dev_priv, TRANS_VTOTAL_WD0, vactive - 1);
 
 	tmp = intel_de_read(dev_priv, WD_TRANS_FUNC_CTL(intel_wb->trans));
 	/* select pixel format */
@@ -624,7 +702,7 @@ static int intel_wb_setup_transcoder(struct intel_wb *intel_wb,
 
 	/* select input pipe */
 	tmp &= ~WD_INPUT_SELECT_MASK;
-	pipe = PIPE_A;
+
 	switch (pipe) {
 	default:
 		fallthrough;
@@ -655,19 +733,19 @@ static int intel_wb_setup_transcoder(struct intel_wb *intel_wb,
 	wd_dump_details(intel_crtc, intel_wb);
 	drm_dbg_kms(&dev_priv->drm, "wd_go5-A3 ------------------------------------------------------------\n");
 #endif
-	tmp = intel_de_read(dev_priv, TRANSCONF(intel_wb->trans));
-	drm_dbg_kms(&dev_priv->drm, "TRANSCONF: 0x%05x\n", TRANSCONF(intel_wb->trans).reg);
+	tmp = intel_de_read(dev_priv, TRANS_CONF_WD0);
+	drm_dbg_kms(&dev_priv->drm, "PIPECONF: 0x%05x\n", TRANS_CONF_WD0.reg);
 	ret = tmp & WD_TRANS_ACTIVE;
 	if (!ret) {
 		/* enable the transcoder */
-		tmp = intel_de_read(dev_priv, TRANSCONF(intel_wb->trans));
+		tmp = intel_de_read(dev_priv, TRANS_CONF_WD0);
 		tmp |= WD_TRANS_ENABLE;
 		drm_dbg_kms(&dev_priv->drm, "TRANSCONF: 0x%08x\n", tmp);
 
-		intel_de_write(dev_priv, TRANSCONF(intel_wb->trans), tmp);
+		intel_de_write(dev_priv, TRANS_CONF_WD0, tmp);
 
 		/* wait for transcoder to be enabled */
-		if (intel_de_wait_for_set(dev_priv, TRANSCONF(intel_wb->trans),
+		if (intel_de_wait_for_set(dev_priv, TRANS_CONF_WD0,
 					  WD_TRANS_ACTIVE, 100))
 			drm_err(&dev_priv->drm, "WD transcoder could not be enabled\n");
 	}
@@ -685,8 +763,9 @@ static int intel_wb_capture(struct intel_wb *intel_wb,
 	int ret = 0, status = 0;
 	struct intel_crtc *wb_crtc = intel_wb->wb_crtc;
 	unsigned long flags;
+
 	drm_dbg_kms(&i915->drm,
-			"intel_wb_capture start\n");
+			"WD_ intel_wb_capture start\n");
 
 	if (!job->out_fence)
 		drm_dbg_kms(&i915->drm, "Not able to get out_fence for job\n");
@@ -725,6 +804,7 @@ static int intel_wb_capture(struct intel_wb *intel_wb,
 	}
 
 	intel_wb_writeback_complete(intel_wb, job, status);
+
 	if (wb_crtc->wb.e) {
 		spin_lock_irqsave(&i915->drm.event_lock, flags);
 		drm_dbg_kms(&i915->drm, "send %p\n", wb_crtc->wb.e);
@@ -750,6 +830,7 @@ void intel_wb_enable_capture(struct intel_crtc_state *pipe_config,
 		drm_connector_to_writeback(conn_state->connector);
 	struct intel_wb *intel_wb = wb_conn_to_intel_wb(wb_conn);
 	struct drm_writeback_job *job;
+	struct intel_crtc *intel_crtc = to_intel_crtc(pipe_config->uapi.crtc);
 
 	job = intel_get_writeback_job_from_queue(intel_wb);
 	if (!job) {
@@ -758,8 +839,11 @@ void intel_wb_enable_capture(struct intel_crtc_state *pipe_config,
 		return;
 	}
 
+	trace_intel_wb_capture_start(intel_crtc);
 	intel_wb_capture(intel_wb, pipe_config,
 			 conn_state, job);
+	trace_intel_wb_capture_end(intel_crtc);
+
 	intel_wb->frame_num += 1;
 }
 
