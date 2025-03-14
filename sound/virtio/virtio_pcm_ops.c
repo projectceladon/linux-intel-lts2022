@@ -397,7 +397,11 @@ static int virtsnd_pcm_sync_stop(struct snd_pcm_substream *substream)
 	unsigned int js = msecs_to_jiffies(virtsnd_msg_timeout_ms);
 	int rc;
 
+#if 0
 	cancel_work_sync(&vss->elapsed_period);
+#else
+	del_timer(&vss->timer);
+#endif
 
 	if (!vss->stopped)
 		return 0;

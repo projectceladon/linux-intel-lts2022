@@ -334,7 +334,11 @@ static void virtsnd_pcm_msg_complete(struct virtio_pcm_msg *msg,
 			bytes_to_frames(runtime,
 					le32_to_cpu(msg->status.latency_bytes));
 
+#if 0
 		schedule_work(&vss->elapsed_period);
+#else
+		mod_timer(&vss->timer, jiffies + msecs_to_jiffies(1));
+#endif
 	} else if (!vss->msg_count) {
 		wake_up_all(&vss->msg_empty);
 	}

@@ -294,6 +294,7 @@ int virtsnd_pcm_validate(struct virtio_device *vdev)
 	return 0;
 }
 
+#if 0
 /**
  * virtsnd_pcm_period_elapsed() - Kernel work function to handle the elapsed
  *                                period state.
@@ -312,6 +313,18 @@ static void virtsnd_pcm_period_elapsed(struct work_struct *work)
 
 	snd_pcm_period_elapsed(vss->substream);
 }
+#else
+static void virtsnd_pcm_period_elapsed_timer(struct timer_list *t)
+{
+	struct virtio_pcm_substream *vss = from_timer(vss, t, timer);
+
+	spin_lock(&vss->lock);
+	del_timer_sync(&vss->timer);
+	spin_unlock(&vss->lock);
+
+	snd_pcm_period_elapsed(vss->substream);
+}
+#endif
 
 /**
  * virtsnd_pcm_parse_cfg() - Parse the stream configuration.
@@ -354,8 +367,12 @@ int virtsnd_pcm_parse_cfg(struct virtio_snd *snd)
 
 		vss->snd = snd;
 		vss->sid = i;
+#if 0
 		INIT_WORK(&vss->elapsed_period, virtsnd_pcm_period_elapsed);
 		init_waitqueue_head(&vss->msg_empty);
+#else
+		timer_setup(&vss->timer, virtsnd_pcm_period_elapsed_timer, 0);
+#endif
 		spin_lock_init(&vss->lock);
 
 		rc = virtsnd_pcm_build_hw(vss, &info[i]);

@@ -50,7 +50,11 @@ struct virtio_pcm_substream {
 	struct snd_pcm_substream *substream;
 	struct snd_pcm_indirect pcm_indirect;
 	struct snd_pcm_hardware hw;
+#if 0
 	struct work_struct elapsed_period;
+#else
+	struct timer_list timer;
+#endif
 	spinlock_t lock;
 	size_t buffer_bytes;
 	size_t hw_ptr;
