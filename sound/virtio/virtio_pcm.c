@@ -513,7 +513,7 @@ void virtsnd_pcm_event(struct virtio_snd *snd, struct virtio_snd_event *event)
 		break;
 	}
 }
-#ifdef CONFIG_VIRTIO_IVSHMEM
+#if defined(CONFIG_VIRTIO_IVSHMEM) && defined(CONFIG_SND_VIRTIO)
 bool virtsnd_pcm_is_ivshmem_region(struct snd_pcm_substream *substream)
 {
 	struct snd_card *card;
