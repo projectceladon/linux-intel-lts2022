@@ -354,7 +354,9 @@ int virtsnd_pcm_parse_cfg(struct virtio_snd *snd)
 
 		vss->snd = snd;
 		vss->sid = i;
+#if 0
 		INIT_WORK(&vss->elapsed_period, virtsnd_pcm_period_elapsed);
+#endif
 		init_waitqueue_head(&vss->msg_empty);
 		spin_lock_init(&vss->lock);
 

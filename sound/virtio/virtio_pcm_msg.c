@@ -282,6 +282,26 @@ unsigned int virtsnd_pcm_msg_pending_num(struct virtio_pcm_substream *vss)
 	return num;
 }
 
+static void virtsnd_pcm_period_elapsed(struct timer_list *timer)
+{
+        unsigned long flags;
+        struct virtio_pcm_substream *vss = from_timer(vss, timer, elapsed_timer);
+
+#if 0
+        struct virtio_snd *snd = vss->snd;
+        struct virtio_device *vdev = snd->vdev;
+        dev_err(&vdev->dev, "%s: SID %u: \n", __func__, vss->sid);
+#endif
+
+        spin_lock_irqsave(&vss->lock, flags);
+        if (timer_pending(&vss->elapsed_timer)) {
+	    del_timer(&vss->elapsed_timer);
+	}
+        spin_unlock_irqrestore(&vss->lock, flags);
+
+        snd_pcm_period_elapsed(vss->substream);
+}
+
 /**
  * virtsnd_pcm_msg_complete() - Complete an I/O message.
  * @msg: I/O message.
@@ -302,6 +322,11 @@ static void virtsnd_pcm_msg_complete(struct virtio_pcm_msg *msg,
 				     size_t written_bytes)
 {
 	struct virtio_pcm_substream *vss = msg->substream;
+#if 0
+	struct virtio_snd *snd = vss->snd;
+        struct virtio_device *vdev = snd->vdev;
+        dev_err(&vdev->dev, "%s: SID %u: \n", __func__, vss->sid);
+#endif
 
 	/*
 	 * hw_ptr always indicates the buffer position of the first I/O message
@@ -334,7 +359,14 @@ static void virtsnd_pcm_msg_complete(struct virtio_pcm_msg *msg,
 			bytes_to_frames(runtime,
 					le32_to_cpu(msg->status.latency_bytes));
 
+#if 0
 		schedule_work(&vss->elapsed_period);
+#else
+		if (!timer_pending(&vss->elapsed_timer)) {
+			timer_setup(&vss->elapsed_timer, virtsnd_pcm_period_elapsed, 0);
+		}
+		mod_timer(&vss->elapsed_timer, jiffies + msecs_to_jiffies(1));
+#endif
 	} else if (!vss->msg_count) {
 		wake_up_all(&vss->msg_empty);
 	}
