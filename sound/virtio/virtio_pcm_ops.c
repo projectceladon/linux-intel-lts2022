@@ -397,11 +397,11 @@ static int virtsnd_pcm_sync_stop(struct snd_pcm_substream *substream)
 	unsigned int js = msecs_to_jiffies(virtsnd_msg_timeout_ms);
 	int rc;
 
-#if 0
-	cancel_work_sync(&vss->elapsed_period);
-#else
-	del_timer(&vss->elapsed_timer);
-#endif
+	if (vss->direction == SNDRV_PCM_STREAM_CAPTURE) {
+		cancel_work_sync(&vss->elapsed_period);
+	} else if (vss->direction == SNDRV_PCM_STREAM_PLAYBACK) {
+		del_timer(&vss->elapsed_timer);
+	}
 
 	if (!vss->stopped)
 		return 0;

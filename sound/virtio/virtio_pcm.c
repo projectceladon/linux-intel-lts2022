@@ -378,6 +378,7 @@ int virtsnd_pcm_parse_cfg(struct virtio_snd *snd)
 			break;
 		case VIRTIO_SND_D_INPUT:
 			vss->direction = SNDRV_PCM_STREAM_CAPTURE;
+			INIT_WORK(&vss->elapsed_period, virtsnd_pcm_period_elapsed);
 			break;
 		default:
 			dev_err(&vdev->dev, "SID %u: unknown direction (%u)\n",

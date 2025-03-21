@@ -359,14 +359,14 @@ static void virtsnd_pcm_msg_complete(struct virtio_pcm_msg *msg,
 			bytes_to_frames(runtime,
 					le32_to_cpu(msg->status.latency_bytes));
 
-#if 0
-		schedule_work(&vss->elapsed_period);
-#else
-		if (!timer_pending(&vss->elapsed_timer)) {
-			timer_setup(&vss->elapsed_timer, virtsnd_pcm_period_elapsed, 0);
+		if (vss->direction == SNDRV_PCM_STREAM_CAPTURE) {
+			schedule_work(&vss->elapsed_period);
+		} else if (vss->direction == SNDRV_PCM_STREAM_PLAYBACK) {
+			if (!timer_pending(&vss->elapsed_timer)) {
+				timer_setup(&vss->elapsed_timer, virtsnd_pcm_period_elapsed, 0);
+			}
+			mod_timer(&vss->elapsed_timer, jiffies + msecs_to_jiffies(1));
 		}
-		mod_timer(&vss->elapsed_timer, jiffies + msecs_to_jiffies(1));
-#endif
 	} else if (!vss->msg_count) {
 		wake_up_all(&vss->msg_empty);
 	}

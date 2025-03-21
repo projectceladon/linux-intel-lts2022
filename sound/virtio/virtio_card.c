@@ -370,11 +370,11 @@ static void virtsnd_remove(struct virtio_device *vdev)
 	for (i = 0; snd->substreams && i < snd->nsubstreams; ++i) {
 		struct virtio_pcm_substream *vss = &snd->substreams[i];
 
-#if 0
-		cancel_work_sync(&vss->elapsed_period);
-#else
-		del_timer(&vss->elapsed_timer);
-#endif
+		if (vss->direction == SNDRV_PCM_STREAM_CAPTURE) {
+			cancel_work_sync(&vss->elapsed_period);
+		} else if (vss->direction == SNDRV_PCM_STREAM_PLAYBACK) {
+			del_timer(&vss->elapsed_timer);
+		}
 		virtsnd_pcm_msg_free(vss);
 	}
 
@@ -401,11 +401,11 @@ static int virtsnd_freeze(struct virtio_device *vdev)
 	virtio_reset_device(vdev);
 
 	for (i = 0; i < snd->nsubstreams; ++i) {
-#if 0
-		cancel_work_sync(&snd->substreams[i].elapsed_period);
-#else
-		del_timer(&snd->substreams[i].elapsed_timer);
-#endif
+		if (snd->substreams[i].direction == SNDRV_PCM_STREAM_CAPTURE) {
+			cancel_work_sync(&snd->substreams[i].elapsed_period);
+		} else if (snd->substreams[i].direction == SNDRV_PCM_STREAM_PLAYBACK) {
+			del_timer(&snd->substreams[i].elapsed_timer);
+		}
 	}
 
 	kfree(snd->event_msgs);
