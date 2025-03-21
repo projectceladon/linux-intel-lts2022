@@ -233,6 +233,10 @@ intel_dp_aux_xfer(struct intel_dp *intel_dp,
 		ch_data[i] = intel_dp->aux_ch_data_reg(intel_dp, i);
 
 	if (is_tc_port) {
+		if (!dig_port) {
+			ret = -ENXIO;
+			goto out_fail;
+		}
 		intel_tc_port_lock(dig_port);
 		/*
 		 * Abort transfers on a disconnected port as required by
@@ -413,6 +417,7 @@ out_unlock:
 	if (is_tc_port)
 		intel_tc_port_unlock(dig_port);
 
+out_fail:
 	return ret;
 }
 
