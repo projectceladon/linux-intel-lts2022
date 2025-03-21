@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: GPL-2.0
+config VIDEO_V4L2LOOPBACK
+	tristate "v4l2loopback driver"
+	default m
+	depends on X86
+	help
+	  This is the v4l2loopback driver.
