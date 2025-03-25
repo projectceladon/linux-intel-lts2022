@@ -295,6 +295,11 @@ struct intel_guc {
 #endif
 };
 
+struct intel_guc_tlb_wait {
+	struct wait_queue_head wq;
+	bool busy;
+};
+
 /*
  * GuC version number components are only 8-bit, so converting to a 32bit 8.8.8
  * integer works.
@@ -302,11 +307,6 @@ struct intel_guc {
 #define MAKE_GUC_VER(maj, min, pat)	(((maj) << 16) | ((min) << 8) | (pat))
 #define MAKE_GUC_VER_STRUCT(ver)	MAKE_GUC_VER((ver).major, (ver).minor, (ver).patch)
 #define GUC_SUBMIT_VER(guc)		MAKE_GUC_VER_STRUCT((guc)->submission_version)
-
-struct intel_guc_tlb_wait {
-	struct wait_queue_head wq;
-	u8 status;
-} __aligned(4);
 
 static inline struct intel_guc *log_to_guc(struct intel_guc_log *log)
 {
@@ -438,8 +438,6 @@ int intel_guc_allocate_and_map_vma(struct intel_guc *guc, u32 size,
 int intel_guc_self_cfg32(struct intel_guc *guc, u16 key, u32 value);
 int intel_guc_self_cfg64(struct intel_guc *guc, u16 key, u64 value);
 
-int intel_guc_invalidate_tlb_full(struct intel_guc *guc);
-int intel_guc_invalidate_tlb(struct intel_guc *guc);
 int intel_guc_tlb_invalidation_done(struct intel_guc *guc, const u32 *hxg,
 				    u32 size);
 
@@ -543,6 +541,11 @@ void intel_guc_write_barrier(struct intel_guc *guc);
 void intel_guc_dump_time_info(struct intel_guc *guc, struct drm_printer *p);
 
 int intel_guc_sched_disable_gucid_threshold_max(struct intel_guc *guc);
+bool intel_guc_tlb_invalidation_is_available(struct intel_guc *guc);
+int intel_guc_invalidate_tlb_engines(struct intel_guc *guc);
+int intel_guc_invalidate_tlb_guc(struct intel_guc *guc);
+int intel_guc_tlb_invalidation_done(struct intel_guc *guc,
+				    const u32 *payload, u32 len);
 
 void wake_up_all_tlb_invalidate(struct intel_guc *guc);
 #endif
