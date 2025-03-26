@@ -702,6 +702,7 @@ static const struct intel_device_info adl_p_info = {
 	.__runtime.ppgtt_size = 47,
 	.dma_mask_size = 39,
 	.has_sriov = 1,
+	.has_guc_tlb_invalidation = 1,
 };
 
 #undef GEN
@@ -837,6 +838,7 @@ static const struct intel_device_info mtl_info = {
 	.has_flat_ccs = 0,
 	.has_gmd_id = 1,
 	.has_guc_deprivilege = 1,
+	.has_guc_tlb_invalidation = 1,
 	.has_llc = 0,
 	.has_memirq = 1,
 	.has_mslice_steering = 0,

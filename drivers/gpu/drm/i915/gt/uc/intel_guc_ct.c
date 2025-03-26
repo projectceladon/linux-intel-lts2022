@@ -116,6 +116,33 @@ struct ct_incoming_msg {
 enum { CTB_SEND = 0, CTB_RECV = 1 };
 
 enum { CTB_OWNER_HOST = 0 };
+/*
+ * Some H2G commands involve a synchronous response that the driver needs
+ * to wait for. In such cases, a timeout is required to prevent the driver
+ * from waiting forever in the case of an error (either no error response
+ * is defined in the protocol or something has died and requires a reset).
+ * The specific command may be defined as having a time bound response but
+ * the CT is a queue and that time guarantee only starts from the point
+ * when the command reaches the head of the queue and is processed by GuC.
+ *
+ * Ideally there would be a helper to report the progress of a given
+ * command through the CT. However, that would require a significant
+ * amount of work in the CT layer. In the meantime, provide a reasonable
+ * estimation of the worst case latency it should take for the entire
+ * queue to drain. And therefore, how long a caller should wait before
+ * giving up on their request. The current estimate is based on empirical
+ * measurement of a test that fills the buffer with context creation and
+ * destruction requests as they seem to be the slowest operation.
+ */
+long intel_guc_ct_max_queue_time_jiffies(void)
+{
+	/*
+	 * A 4KB buffer full of context destroy commands takes a little
+	 * over a second to process so bump that to 2s to be super safe.
+	 */
+	return (CTB_H2G_BUFFER_SIZE * HZ) / SZ_2K;
+}
+
 
 /* FIXME: MTL cache coherency issue - HSD 22016122933 */
 static noinline void mtl_workaround_worker_func(struct work_struct *wrk);
@@ -1199,6 +1226,9 @@ static int ct_process_request(struct intel_guc_ct *ct, struct ct_incoming_msg *r
 		CT_ERROR(ct, "Received GuC exception notification!\n");
 		ret = 0;
 		break;
+	case INTEL_GUC_ACTION_TLB_INVALIDATION_DONE:
+ 		ret = intel_guc_tlb_invalidation_done(guc, payload, len);
+ 		break;
 	default:
 		ret = -EOPNOTSUPP;
 		break;
@@ -1273,13 +1303,12 @@ static int ct_handle_event(struct intel_guc_ct *ct, struct ct_incoming_msg *requ
 	case INTEL_GUC_ACTION_TLB_INVALIDATION_DONE:
 		g2h_release_space(ct, request->size);
 	}
-
-	/* Handle tlb invalidation response in interrupt context */
-	if (action == INTEL_GUC_ACTION_TLB_INVALIDATION_DONE) {
-		int ret = intel_guc_tlb_invalidation_done(ct_to_guc(ct), hxg, request->size);
-		ct_free_msg(request);
-		return ret;
-	}
+	/*
+	 * TLB invalidation responses must be handled immediately as processing
+	 * of other G2H notifications may be blocked by an invalidation request.
+	 */
+	if (action == INTEL_GUC_ACTION_TLB_INVALIDATION_DONE)
+		return ct_process_request(ct, request);
 
 	spin_lock_irqsave(&ct->requests.lock, flags);
 	list_add_tail(&request->link, &ct->requests.incoming);
