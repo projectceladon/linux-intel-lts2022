@@ -62,6 +62,8 @@ struct virtio_pcm_substream {
 	unsigned int nmsgs;
 	unsigned int msg_count;
 	wait_queue_head_t msg_empty;
+
+	int force_release;
 };
 
 /**

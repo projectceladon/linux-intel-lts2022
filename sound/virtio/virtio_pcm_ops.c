@@ -116,6 +116,7 @@ static int virtsnd_pcm_open(struct snd_pcm_substream *substream)
 
 	vss->stopped = !!virtsnd_pcm_msg_pending_num(vss);
 	vss->suspended = false;
+	vss->force_release = false;
 
 	/*
 	 * If the substream has already been used, then the I/O queue may be in
@@ -134,6 +135,10 @@ static int virtsnd_pcm_open(struct snd_pcm_substream *substream)
  */
 static int virtsnd_pcm_close(struct snd_pcm_substream *substream)
 {
+	struct virtio_pcm_substream *vss = snd_pcm_substream_chip(substream);
+
+	vss->force_release = true;
+	virtsnd_pcm_sync_stop(substream);
 	return 0;
 }
 
@@ -272,6 +277,14 @@ static int virtsnd_pcm_prepare(struct snd_pcm_substream *substream)
 	struct virtio_pcm_substream *vss = snd_pcm_substream_chip(substream);
 	struct virtio_device *vdev = vss->snd->vdev;
 	struct virtio_snd_msg *msg;
+	struct snd_pcm_runtime *runtime = vss->substream->runtime;
+
+	snd_pcm_stream_lock_irq(substream);
+	if (runtime->state == SNDRV_PCM_STATE_XRUN) {
+		snd_pcm_stream_unlock_irq(substream);
+		return 0;
+	}
+	snd_pcm_stream_unlock_irq(substream);
 
 	if (!vss->suspended) {
 		if (virtsnd_pcm_msg_pending_num(vss)) {
@@ -396,10 +409,18 @@ static int virtsnd_pcm_sync_stop(struct snd_pcm_substream *substream)
 	struct virtio_snd_msg *msg;
 	unsigned int js = msecs_to_jiffies(virtsnd_msg_timeout_ms);
 	int rc;
+	struct snd_pcm_runtime *runtime = vss->substream->runtime;
+
+	snd_pcm_stream_lock_irq(substream);
+	if (runtime->state == SNDRV_PCM_STATE_XRUN) {
+		snd_pcm_stream_unlock_irq(substream);
+		return 0;
+	}
+	snd_pcm_stream_unlock_irq(substream);
 
 	cancel_work_sync(&vss->elapsed_period);
 
-	if (!vss->stopped)
+	if (!vss->force_release && !vss->stopped)
 		return 0;
 
 	msg = virtsnd_pcm_ctl_msg_alloc(vss, VIRTIO_SND_R_PCM_RELEASE,
