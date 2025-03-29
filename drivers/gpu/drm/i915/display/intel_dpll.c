@@ -943,6 +943,9 @@ static int hsw_crtc_compute_clock(struct intel_atomic_state *state,
 		intel_get_crtc_new_encoder(state, crtc_state);
 	int ret;
 
+	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_WB))
+		return 0;
+
 	if (DISPLAY_VER(dev_priv) < 11 &&
 	    intel_crtc_has_type(crtc_state, INTEL_OUTPUT_DSI))
 		return 0;
@@ -970,6 +973,9 @@ static int hsw_crtc_get_shared_dpll(struct intel_atomic_state *state,
 		intel_atomic_get_new_crtc_state(state, crtc);
 	struct intel_encoder *encoder =
 		intel_get_crtc_new_encoder(state, crtc_state);
+
+	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_WB))
+		return 0;
 
 	if (DISPLAY_VER(dev_priv) < 11 &&
 	    intel_crtc_has_type(crtc_state, INTEL_OUTPUT_DSI))
