@@ -30,6 +30,14 @@
 #define VI_REG_OFFSET(reg)	offsetof(struct virtio_shmem_header, reg)
 #define VI_CFG_REG_OFFSET(reg)  VI_REG_OFFSET(common_config.reg)
 
+#define VIRTIO_SHMEM_BE_STATUS_ACTIVE 	1
+#define VIRTIO_SHMEM_BE_STATUS_INACTIVE	2
+#define VIRTIO_SHMEM_BE_STATUS_RESET	3
+
+#define VIRTIO_SHMEM_HANDSHAKE_MASK	0xa69
+#define VIRTIO_SHMEM_HANDSHAKE_ACK 0x0b69
+#define VIRTIO_SHMEM_SYNC_TIMES 10000
+
 struct virtio_shmem_vq_info {
 	/* the actual virtqueue */
 	struct virtqueue *vq;
@@ -57,17 +65,61 @@ static inline unsigned int get_custom_order(unsigned long size,
 #endif
 }
 
+static int virtio_shmem_reset_virtio_dev(struct virtio_shmem_device *vi_dev);
+
 static inline struct virtio_shmem_device *
 to_virtio_shmem_device(struct virtio_device *vdev)
 {
 	return container_of(vdev, struct virtio_shmem_device, vdev);
 }
 
+static int virtio_shmem_be_status(struct virtio_shmem_device *vi_dev)
+{
+	uint32_t mask = READ_ONCE(vi_dev->virtio_header->handshake);
+
+	if ((mask & 0xffff) != VIRTIO_SHMEM_HANDSHAKE_MASK)
+		return VIRTIO_SHMEM_BE_STATUS_INACTIVE;
+	if ((mask & 0xffff0000) >> 16 != vi_dev->backend_rand && vi_dev->virtio_registered == true)
+		return VIRTIO_SHMEM_BE_STATUS_RESET;
+	else
+		return VIRTIO_SHMEM_BE_STATUS_ACTIVE;
+}
+
+static void vi_handshake_work(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct virtio_shmem_device *vi_dev =
+		container_of(dwork, struct virtio_shmem_device, shmem_handshake_work);
+
+	switch (virtio_shmem_be_status(vi_dev)) {
+		case VIRTIO_SHMEM_BE_STATUS_ACTIVE:
+			if(virtio_shmem_register_virtio_dev(vi_dev))
+				put_device(&vi_dev->vdev.dev);
+			break;
+		case VIRTIO_SHMEM_BE_STATUS_RESET:
+			if(virtio_shmem_reset_virtio_dev(vi_dev))
+				put_device(&vi_dev->vdev.dev);
+			break;
+		default:
+			virtio_shmem_unregister_virtio_dev(vi_dev);
+			break;
+	}
+	WRITE_ONCE(vi_dev->virtio_header->handshake, (vi_dev->peer_id << 16) | VIRTIO_SHMEM_HANDSHAKE_ACK);
+	schedule_delayed_work(&vi_dev->shmem_handshake_work, HZ * 2);
+}
+
 static bool vi_synchronize_reg_write(struct virtio_shmem_device *vi_dev)
 {
-	while (READ_ONCE(vi_dev->virtio_header->write_transaction))
+	int times = 0;
+	while (READ_ONCE(vi_dev->virtio_header->write_transaction)) {
 		cpu_relax();
-
+		if(times++ > VIRTIO_SHMEM_SYNC_TIMES) {
+			if (virtio_shmem_be_status(vi_dev) != VIRTIO_SHMEM_BE_STATUS_ACTIVE)
+				break;
+			else
+				times = 0;
+		}
+	}
 	return true;
 }
 
@@ -596,7 +648,7 @@ static struct page *dma_addr_to_page(struct virtio_shmem_device *vi_dev, dma_add
 	unsigned long pfn;
 
 	if (dma_handle >= vi_dev->shmem_sz) {
-		dev_warn(&vi_dev->pci_dev->dev, "DMA handle 0x%llx is out of shared memory region [0x%llx, 0x%llx)\n",
+		dev_warn(&vi_dev->pci_dev->dev, "DMA handle 0x%llx is out of shared memory region [0x%p, 0x%p)\n",
 		     dma_handle, vi_dev->shmem, vi_dev->shmem + vi_dev->shmem_sz);
 		return NULL;
 	}
@@ -613,7 +665,7 @@ static dma_addr_t page_to_dma_addr(struct virtio_shmem_device *vi_dev, struct pa
 	pfn = page_to_pfn(page);
 	dma_handle = PFN_PHYS(pfn) - vi_dev->shmem_phys_base;
 	if (dma_handle >= vi_dev->shmem_sz) {
-		dev_warn(&vi_dev->pci_dev->dev, "PFN 0x%lx is out of shared memory region [0x%llx, 0x%llx)\n",
+		dev_warn(&vi_dev->pci_dev->dev, "PFN 0x%lx is out of shared memory region [0x%p, 0x%p)\n",
 		     pfn, vi_dev->shmem, vi_dev->shmem + vi_dev->shmem_sz);
 		return 0;
 	}
@@ -824,7 +876,6 @@ void virtio_shmem_free_page(struct device *dev, struct page *page)
 
 void *virtio_shmem_alloc(struct device *dev, size_t size)
 {
-	struct pci_dev *pci_dev = to_pci_dev(dev);
 	void *addr;
 	dma_addr_t dma_handle;
 
@@ -869,6 +920,78 @@ static const struct dev_pagemap_ops virtio_shmem_region_pgmap_ops = {
 	.page_free		= virtio_shmem_region_page_free,
 };
 
+static int
+vi_register_virtio_dev(struct virtio_shmem_device *vi_dev)
+{
+	int ret, bitmap_size;
+
+	if (vi_dev->virtio_header->revision < 1) {
+		dev_err(&vi_dev->pci_dev->dev, "invalid virtio-shmem revision\n");
+		return -EINVAL;
+	}
+	vi_dev->vdev.dev.parent = &vi_dev->pci_dev->dev;
+	vi_dev->vdev.dev.release = virtio_shmem_release_dev;
+	vi_dev->vdev.config = &virtio_shmem_config_ops;
+	vi_dev->vdev.id.device = vi_dev->virtio_header->device_id;
+	vi_dev->vdev.id.vendor = vi_dev->virtio_header->vendor_id;
+	if (vi_dev->virtio_header->backend_flags == 0) {
+		dev_err(&vi_dev->pci_dev->dev, "backend is not present\n");
+		return -EINVAL;
+	}
+	vi_dev->peer_id = vi_dev->virtio_header->backend_id;
+	vi_dev->virtio_header->frontend_status = (vi_dev->this_id << 16) | FRONTEND_FLAG_PRESENT;
+
+	vi_dev->vdev.id.device = vi_dev->virtio_header->device_id;
+	vi_dev->vdev.id.vendor = vi_dev->virtio_header->vendor_id;
+	vi_dev->backend_rand = (vi_dev->virtio_header->handshake & 0xffff0000) >> 16;
+
+
+	/* mark the header chunks used */
+	bitmap_size = BITS_TO_LONGS(vi_dev->shmem_sz >> vi_dev->alloc_shift) * sizeof(long);
+	memset(vi_dev->alloc_bitmap, 0, bitmap_size);
+	bitmap_set(vi_dev->alloc_bitmap, 0,
+		1 << get_custom_order(vi_dev->virtio_header->size,
+				vi_dev->alloc_shift));
+
+	ret = register_virtio_device(&vi_dev->vdev);
+	if (!ret) {
+		vi_dev->virtio_registered = true;
+	}
+	return ret;
+}
+
+static void
+vi_unregister_virtio_dev(struct virtio_shmem_device *vi_dev)
+{
+	unregister_virtio_device(&vi_dev->vdev);
+	memset(&vi_dev->vdev, 0, sizeof(struct virtio_device));
+	vi_dev->virtio_registered = false;
+}
+
+int virtio_shmem_register_virtio_dev(struct virtio_shmem_device *vi_dev)
+{
+	if (vi_dev->virtio_registered == false) {
+		return vi_register_virtio_dev(vi_dev);
+	}
+	return 0;
+}
+
+void virtio_shmem_unregister_virtio_dev(struct virtio_shmem_device *vi_dev)
+{
+	if (vi_dev->virtio_registered == true) {
+		dev_dbg(&vi_dev->pci_dev->dev, "virtio shmem unregister virtio device\n");
+		vi_unregister_virtio_dev(vi_dev);
+	}
+}
+
+static int virtio_shmem_reset_virtio_dev(struct virtio_shmem_device *vi_dev)
+{
+	dev_dbg(&vi_dev->pci_dev->dev, "virtio shmem reset virtio device\n");
+	virtio_shmem_unregister_virtio_dev(vi_dev);
+	return virtio_shmem_register_virtio_dev(vi_dev);
+}
+
+
 int virtio_shmem_probe(struct virtio_shmem_device *vi_dev)
 {
 	unsigned int chunks, chunk_size, bitmap_size;
@@ -876,9 +999,6 @@ int virtio_shmem_probe(struct virtio_shmem_device *vi_dev)
 	struct dev_pagemap *pgmap;
 
 	pci_dev = vi_dev->pci_dev;
-
-	vi_dev->vdev.dev.release = virtio_shmem_release_dev;
-	vi_dev->vdev.config = &virtio_shmem_config_ops;
 
 	spin_lock_init(&vi_dev->virtqueues_lock);
 	INIT_LIST_HEAD(&vi_dev->virtqueues);
@@ -901,19 +1021,7 @@ int virtio_shmem_probe(struct virtio_shmem_device *vi_dev)
 		return -ENOMEM;
 
 	vi_dev->virtio_header = vi_dev->shmem;
-	if (vi_dev->virtio_header->revision < 1) {
-		dev_err(&pci_dev->dev, "invalid virtio-shmem revision\n");
-		return -EINVAL;
-	}
-	if (vi_dev->virtio_header->backend_flags == 0) {
-		dev_err(&pci_dev->dev, "backend is not present\n");
-		return -EINVAL;
-	}
-	vi_dev->peer_id = vi_dev->virtio_header->backend_id;
-	vi_dev->virtio_header->frontend_status = (vi_dev->this_id << 16) | FRONTEND_FLAG_PRESENT;
-
-	vi_dev->vdev.id.device = vi_dev->virtio_header->device_id;
-	vi_dev->vdev.id.vendor = vi_dev->virtio_header->vendor_id;
+	vi_dev->virtio_header->handshake = (vi_dev->this_id << 16) | VIRTIO_SHMEM_HANDSHAKE_ACK;
 
 	spin_lock_init(&vi_dev->alloc_lock);
 
@@ -932,11 +1040,6 @@ int virtio_shmem_probe(struct virtio_shmem_device *vi_dev)
 	if (!vi_dev->alloc_bitmap)
 		return -ENOMEM;
 
-	/* mark the header chunks used */
-	bitmap_set(vi_dev->alloc_bitmap, 0,
-		   1 << get_custom_order(vi_dev->virtio_header->size,
-					 vi_dev->alloc_shift));
-
 	vi_dev->map_src_addr = devm_kzalloc(&pci_dev->dev,
 					    chunks * sizeof(void *),
 					    GFP_KERNEL);
@@ -944,6 +1047,15 @@ int virtio_shmem_probe(struct virtio_shmem_device *vi_dev)
 		return -ENOMEM;
 
 	set_dma_ops(&pci_dev->dev, &virtio_shmem_dma_ops);
+
+	INIT_DELAYED_WORK(&vi_dev->shmem_handshake_work, vi_handshake_work);
+	schedule_delayed_work(&vi_dev->shmem_handshake_work, 2 * HZ);
+	if (virtio_shmem_be_status(vi_dev) == VIRTIO_SHMEM_BE_STATUS_ACTIVE) {
+		 if(virtio_shmem_register_virtio_dev(vi_dev)) {
+			put_device(&vi_dev->vdev.dev);
+			return -EINVAL;
+		 }
+	}
 
 	return 0;
 }
