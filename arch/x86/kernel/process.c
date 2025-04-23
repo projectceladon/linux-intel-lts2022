@@ -876,16 +876,25 @@ static int prefer_mwait_c1_over_halt(const struct cpuinfo_x86 *c)
  */
 static __cpuidle void mwait_idle(void)
 {
+	bool has_monitor_less_mwait;
+
 	if (!current_set_polling_and_test()) {
 		if (this_cpu_has(X86_BUG_CLFLUSH_MONITOR)) {
 			mb(); /* quirk */
 			clflush((void *)&current_thread_info()->flags);
 			mb(); /* quirk */
 		}
-
+		has_monitor_less_mwait = ((cpuid_ecx(CPUID_MWAIT_LEAF) & CPUID5_ECX_MONITOR_LESS) != 0);
+		/* CPUID may cause vmexit, which we do not wish to see between monitor/mwait. */
+		mb();
 		__monitor((void *)&current_thread_info()->flags, 0, 0);
-		if (!need_resched())
-			__sti_mwait(0, 0);
+		if (!need_resched()) {
+			if (!hypervisor_is_type(X86_HYPER_NATIVE) && has_monitor_less_mwait) {
+				current_clr_polling();
+				__sti_mwait(0, 0x4);
+			} else
+				__sti_mwait(0, 0);
+		}
 		else
 			raw_local_irq_enable();
 	} else {
