@@ -4878,7 +4878,7 @@ static int guc_send_invalidate_tlb(struct intel_guc *guc, u32 type)
 		if (timeout)
 			break;
 		gt_dbg(gt, "TLB invalidation (seqno=%u) pending for %us\n", seqno, ++elapsed);
-		if (elapsed >= 2) {
+		if (elapsed >= 5) {
 			/*
 			 * FIXME: Real TLB invalidation timeout is critical and warrants a GT
 			 * reset. However, it's possible that after this long wait the GT could
@@ -4887,9 +4887,9 @@ static int guc_send_invalidate_tlb(struct intel_guc *guc, u32 type)
 			 */
 			if (intel_gt_is_enabled(gt)) {
 				gt_err(gt,
-				       "TLB invalidation response timed out for seqno %u\n",
+				       "##stang23## TLB invalidation response timed out for seqno %u\n",
 				       seqno);
-				intel_gt_set_wedged(gt);
+				//intel_gt_set_wedged(gt);
 				err = -ETIME;
 			}
 			break;
