@@ -37,6 +37,13 @@ struct virtio_shmem_header {
 			__le16 backend_id;
 		};
 	};
+	union {
+		__le32 handshake;
+		struct {
+			__le16 handshake_mask;
+			__le16 backend_rand;
+		};
+	};
 
 	struct virtio_pci_common_cfg common_config;
 	__u8 config[];
@@ -71,6 +78,10 @@ struct virtio_shmem_device {
 	void (*notify_peer)(struct virtio_shmem_device *vi_dev, unsigned int vector);
 	irqreturn_t (*early_irq_handler)(struct virtio_shmem_device *vi_dev);
 
+	bool virtio_registered;
+	unsigned short backend_rand;
+	struct delayed_work shmem_handshake_work;
+
 	void *priv;
 #ifdef CONFIG_VIRTIO_IVSHMEM_DEBUG
 	resource_size_t shmem_sz_used;
@@ -82,6 +93,8 @@ struct virtio_shmem_device {
 #endif
 };
 
+int virtio_shmem_register_virtio_dev(struct virtio_shmem_device *vi_dev);
+void virtio_shmem_unregister_virtio_dev(struct virtio_shmem_device *vi_dev);
 int virtio_shmem_probe(struct virtio_shmem_device *vi_dev);
 
 #endif /* _DRIVERS_VIRTIO_VIRTIO_SHMEM_H */
