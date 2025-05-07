@@ -13,6 +13,12 @@ struct drm_i915_private;
 struct intel_crtc;
 
 #ifdef CONFIG_DEBUG_FS
+struct display_region {
+	uint16_t x, y;
+	uint16_t width, height;
+	//uint64_t fbbuf; 	/* gpa, size = width * height * BPP */
+}__packed;
+
 void intel_crtc_crc_init(struct intel_crtc *crtc);
 int intel_crtc_set_crc_source(struct drm_crtc *crtc, const char *source_name);
 int intel_crtc_verify_crc_source(struct drm_crtc *crtc,

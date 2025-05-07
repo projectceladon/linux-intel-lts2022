@@ -434,6 +434,40 @@ display_crc_ctl_parse_source(const char *buf, enum intel_pipe_crc_source *s)
 	return 0;
 }
 
+static int intel_crtc_change_crc_region(struct drm_i915_private *dev_priv,
+			       enum pipe pipe,
+			       enum intel_pipe_crc_source *source, u32 *val)
+{
+	struct display_region *region = &dev_priv->regions[dev_priv->next_region++];
+	u32 val = 0;
+
+	intel_de_write(dev_priv, PIPE_CRC_CTL(pipe), val);
+	intel_de_posting_read(dev_priv, PIPE_CRC_CTL(pipe));
+
+	val = intel_de_read(dev_priv, PIPE_CRC_REGIONAL_SIZE(pipe));
+	val &= ~PIPE_CRC_REGIONAL_SIZE_Y_MASK;
+	val |= (region->height << PIPE_CRC_REGIONAL_SIZE_Y_SHIFT) & PIPE_CRC_REGIONAL_SIZE_Y_MASK;
+	val &= ~PIPE_CRC_REGIONAL_SIZE_X_MASK;
+	val |= (region->width << PIPE_CRC_REGIONAL_SIZE_X_SHIFT) & PIPE_CRC_REGIONAL_SIZE_X_MASK;
+	intel_de_write(dev_priv, PIPE_CRC_REGIONAL_SIZE(pipe), val);
+	intel_de_posting_read(dev_priv, PIPE_CRC_REGIONAL_SIZE(pipe));
+
+	val = intel_de_read(dev_priv, PIPE_CRC_REGIONAL_POS(pipe));
+	val &= ~PIPE_CRC_REGIONAL_POS_Y_MASK;
+	val |= (region->y << PIPE_CRC_REGIONAL_POS_Y_SHIFT) & PIPE_CRC_REGIONAL_POS_Y_MASK;
+	val &= ~PIPE_CRC_REGIONAL_POS_X_MASK;
+	val |= (region->x << PIPE_CRC_REGIONAL_POS_X_SHIFT) & PIPE_CRC_REGIONAL_POS_X_MASK;
+	intel_de_write(dev_priv, PIPE_CRC_REGIONAL_POS(pipe), val);
+	intel_de_posting_read(dev_priv, PIPE_CRC_REGIONAL_POS(pipe));
+
+	if (dev_priv->next_region == dev_priv->region_cnt) {
+		dev_priv->next_region = 0;
+	}
+
+	return 0;
+}
+
+
 void intel_crtc_crc_init(struct intel_crtc *crtc)
 {
 	struct intel_pipe_crc *pipe_crc = &crtc->pipe_crc;
