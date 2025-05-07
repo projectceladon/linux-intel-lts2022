@@ -434,6 +434,48 @@ display_crc_ctl_parse_source(const char *buf, enum intel_pipe_crc_source *s)
 	return 0;
 }
 
+static int intel_crtc_change_crc_region(struct drm_i915_private *dev_priv, 
+					struct intel_crtc *crtc,
+  			       enum pipe pipe,
+			       enum intel_pipe_crc_source *source, u32 *val)
+{
+	struct display_region *region;/* = &dev_priv->regions[dev_priv->next_region++];*/
+	struct drm_checksum_region *region_data =
+			(struct drm_checksum_region *)crtc->config->hw.region_blob->data;
+	u32 reg_val = 0;
+
+	region->x = region_data->x_start;
+	region->y = region_data->y_start;	
+	region->width = region_data->x_end - region_data->x_start;
+	region->height = region_data->y_end - region_data->y_start;
+#if 0
+	intel_de_write(dev_priv, PIPE_CRC_CTL(pipe), val);
+	intel_de_posting_read(dev_priv, PIPE_CRC_CTL(pipe));
+#endif
+	reg_val = intel_de_read(dev_priv, PIPE_CRC_REGIONAL_SIZE(pipe));
+	reg_val &= ~PIPE_CRC_REGIONAL_SIZE_Y_MASK;
+	reg_val |= (region->height << PIPE_CRC_REGIONAL_SIZE_Y_SHIFT) & PIPE_CRC_REGIONAL_SIZE_Y_MASK;
+	reg_val &= ~PIPE_CRC_REGIONAL_SIZE_X_MASK;
+	reg_val |= (region->width << PIPE_CRC_REGIONAL_SIZE_X_SHIFT) & PIPE_CRC_REGIONAL_SIZE_X_MASK;
+	intel_de_write(dev_priv, PIPE_CRC_REGIONAL_SIZE(pipe), reg_val);
+	intel_de_posting_read(dev_priv, PIPE_CRC_REGIONAL_SIZE(pipe));
+
+	reg_val = intel_de_read(dev_priv, PIPE_CRC_REGIONAL_POS(pipe));
+	reg_val &= ~PIPE_CRC_REGIONAL_POS_Y_MASK;
+	reg_val |= (region->y << PIPE_CRC_REGIONAL_POS_Y_SHIFT) & PIPE_CRC_REGIONAL_POS_Y_MASK;
+	reg_val &= ~PIPE_CRC_REGIONAL_POS_X_MASK;
+	reg_val |= (region->x << PIPE_CRC_REGIONAL_POS_X_SHIFT) & PIPE_CRC_REGIONAL_POS_X_MASK;
+	intel_de_write(dev_priv, PIPE_CRC_REGIONAL_POS(pipe), reg_val);
+	intel_de_posting_read(dev_priv, PIPE_CRC_REGIONAL_POS(pipe));
+#if 0
+	if (dev_priv->next_region == dev_priv->region_cnt) {
+		dev_priv->next_region = 0;
+	}
+#endif
+	return 0;
+}
+
+
 void intel_crtc_crc_init(struct intel_crtc *crtc)
 {
 	struct intel_pipe_crc *pipe_crc = &crtc->pipe_crc;
@@ -608,6 +650,8 @@ int intel_crtc_set_crc_source(struct drm_crtc *_crtc, const char *source_name)
 		goto out;
 
 	pipe_crc->source = source;
+
+	intel_crtc_change_crc_region(dev_priv, crtc, pipe, &source, &val);
 	intel_de_write(dev_priv, PIPE_CRC_CTL(pipe), val);
 	intel_de_posting_read(dev_priv, PIPE_CRC_CTL(pipe));
 
