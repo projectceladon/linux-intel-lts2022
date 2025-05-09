@@ -2025,6 +2025,12 @@ void intel_ddi_sanitize_encoder_pll_mapping(struct intel_encoder *encoder)
 	 */
 	if (encoder->type == INTEL_OUTPUT_DP_MST)
 		return;
+	/*
+	 * WD transcoder is a virtual encoder hence sanization
+	 * is not required for it
+	 */
+	if (encoder->type == INTEL_OUTPUT_WB)
+		return;
 
 	if (!encoder->base.crtc && intel_encoder_is_dp(encoder)) {
 		u8 pipe_mask;

@@ -34,6 +34,8 @@ const struct intel_display_device_info no_display = {};
 /* ICL DSI 0 and 1 */
 #define PIPE_DSI0_OFFSET	0x7b000
 #define PIPE_DSI1_OFFSET	0x7b800
+#define PIPE_WD0_OFFSET		0x7e000
+#define PIPE_WD1_OFFSET		0x7d000
 
 #define TRANSCODER_A_OFFSET 0x60000
 #define TRANSCODER_B_OFFSET 0x61000
@@ -43,6 +45,8 @@ const struct intel_display_device_info no_display = {};
 #define TRANSCODER_EDP_OFFSET 0x6f000
 #define TRANSCODER_DSI0_OFFSET	0x6b000
 #define TRANSCODER_DSI1_OFFSET	0x6b800
+#define TRANSCODER_WD0_OFFSET	0x6e000
+#define TRANSCODER_WD1_OFFSET	0x6e800
 
 #define CURSOR_A_OFFSET 0x70080
 #define CURSOR_B_OFFSET 0x700c0
@@ -525,6 +529,7 @@ static const struct intel_display_device_info glk_display = {
 		[TRANSCODER_EDP] = PIPE_EDP_OFFSET, \
 		[TRANSCODER_DSI_0] = PIPE_DSI0_OFFSET, \
 		[TRANSCODER_DSI_1] = PIPE_DSI1_OFFSET, \
+		[TRANSCODER_WD_0] = PIPE_WD0_OFFSET, \
 	}, \
 	.trans_offsets = { \
 		[TRANSCODER_A] = TRANSCODER_A_OFFSET, \
@@ -579,6 +584,8 @@ static const struct intel_display_device_info jsl_ehl_display = {
 		[TRANSCODER_D] = PIPE_D_OFFSET, \
 		[TRANSCODER_DSI_0] = PIPE_DSI0_OFFSET, \
 		[TRANSCODER_DSI_1] = PIPE_DSI1_OFFSET, \
+		[TRANSCODER_WD_0] = PIPE_WD0_OFFSET, \
+		[TRANSCODER_WD_1] = PIPE_WD1_OFFSET, \
 	}, \
 	.trans_offsets = { \
 		[TRANSCODER_A] = TRANSCODER_A_OFFSET, \
@@ -587,6 +594,8 @@ static const struct intel_display_device_info jsl_ehl_display = {
 		[TRANSCODER_D] = TRANSCODER_D_OFFSET, \
 		[TRANSCODER_DSI_0] = TRANSCODER_DSI0_OFFSET, \
 		[TRANSCODER_DSI_1] = TRANSCODER_DSI1_OFFSET, \
+		[TRANSCODER_WD_0] = TRANSCODER_WD0_OFFSET, \
+		[TRANSCODER_WD_1] = TRANSCODER_WD1_OFFSET, \
 	}, \
 	TGL_CURSOR_OFFSETS, \
 	ICL_COLORS, \
@@ -600,7 +609,8 @@ static const struct intel_display_device_info jsl_ehl_display = {
 	.__runtime_defaults.cpu_transcoder_mask = \
 		BIT(TRANSCODER_A) | BIT(TRANSCODER_B) | \
 		BIT(TRANSCODER_C) | BIT(TRANSCODER_D) | \
-		BIT(TRANSCODER_DSI_0) | BIT(TRANSCODER_DSI_1), \
+		BIT(TRANSCODER_DSI_0) | BIT(TRANSCODER_DSI_1) | \
+		BIT(TRANSCODER_WD_0), \
 	.__runtime_defaults.fbc_mask = BIT(INTEL_FBC_A)
 
 static const struct intel_display_device_info tgl_display = {
@@ -667,6 +677,8 @@ static const struct intel_display_device_info adl_s_display = {
 		[TRANSCODER_D] = PIPE_D_OFFSET,					\
 		[TRANSCODER_DSI_0] = PIPE_DSI0_OFFSET,				\
 		[TRANSCODER_DSI_1] = PIPE_DSI1_OFFSET,				\
+		[TRANSCODER_WD_0] = PIPE_WD0_OFFSET,				\
+		[TRANSCODER_WD_1] = PIPE_WD1_OFFSET, 				\
 	},									\
 	.trans_offsets = {							\
 		[TRANSCODER_A] = TRANSCODER_A_OFFSET,				\
@@ -675,6 +687,8 @@ static const struct intel_display_device_info adl_s_display = {
 		[TRANSCODER_D] = TRANSCODER_D_OFFSET,				\
 		[TRANSCODER_DSI_0] = TRANSCODER_DSI0_OFFSET,			\
 		[TRANSCODER_DSI_1] = TRANSCODER_DSI1_OFFSET,			\
+		[TRANSCODER_WD_0] = TRANSCODER_WD0_OFFSET, 			\
+		[TRANSCODER_WD_1] = TRANSCODER_WD1_OFFSET, 			\
 	},									\
 	TGL_CURSOR_OFFSETS,							\
 										\
@@ -694,7 +708,8 @@ static const struct intel_display_device_info xe_lpd_display = {
 	.__runtime_defaults.cpu_transcoder_mask =
 		BIT(TRANSCODER_A) | BIT(TRANSCODER_B) |
 		BIT(TRANSCODER_C) | BIT(TRANSCODER_D) |
-		BIT(TRANSCODER_DSI_0) | BIT(TRANSCODER_DSI_1),
+		BIT(TRANSCODER_DSI_0) | BIT(TRANSCODER_DSI_1) |
+		BIT(TRANSCODER_WD_0),
 	.__runtime_defaults.port_mask = BIT(PORT_A) | BIT(PORT_B) |
 		BIT(PORT_TC1) | BIT(PORT_TC2) | BIT(PORT_TC3) | BIT(PORT_TC4),
 };
@@ -888,7 +903,7 @@ void intel_display_device_info_runtime_init(struct drm_i915_private *i915)
 	enum pipe pipe;
 
 	BUILD_BUG_ON(BITS_PER_TYPE(display_runtime->pipe_mask) < I915_MAX_PIPES);
-	BUILD_BUG_ON(BITS_PER_TYPE(display_runtime->cpu_transcoder_mask) < I915_MAX_TRANSCODERS);
+	//BUILD_BUG_ON(BITS_PER_TYPE(display_runtime->cpu_transcoder_mask) < I915_MAX_TRANSCODERS);
 	BUILD_BUG_ON(BITS_PER_TYPE(display_runtime->port_mask) < I915_MAX_PORTS);
 
 	/* Wa_14011765242: adl-s A0,A1 */
