@@ -420,6 +420,48 @@ struct drm_display_mode {
 };
 
 /**
+ * struct drm_checksum_region - The enablement and region of checksum_region
+ * @x_start: Horizontal starting coordinate of the region.
+ * @y_start: Vertical starting coordinate of the region.
+ * @x_end: Horizontal ending coordinate of the region.
+ * @y_end: Vertical ending coordinate of the region.
+ * @checksum_region_enable: To enable or disable checksum_region.
+ *
+ * Userspace uses this structure to configure the region and enablement for
+ * checksum_region. Userspace should not submit a region out of the displayable
+ * region because there is nothing to display and need protection.
+ */
+struct drm_checksum_region {
+	__u32 x_start;
+	__u32 y_start;
+	__u32 x_end;
+	__u32 y_end;
+	__u8 checksum_region_enable;
+	__u8 pad[7];
+};
+
+/**
+ * struct drm_checksum_crc - The CRC value of the corresponding checksum region.
+ * @crc_r: CRC value of red color.
+ * @crc_g: CRC value of green color.
+ * @crc_b: CRC value of blue color.
+ * @frame_count: a referenced frame count to indicate which frame the CRC values
+ *  are generated at.
+ *
+ * Userspace uses this structure to retrieve the CRC values of the current
+ * checksum region. @frame_count will be reset once a new region is updated or
+ * it reaches a maximum value. Currently these CRC values are designed to
+ * be validated with pre-saved CRC values, so userspace doesn't need to concern
+ * about the algorithm used to compute the CRC.
+ */
+struct drm_checksum_crc {
+	__u32 crc_r;
+	__u32 crc_g;
+	__u32 crc_b;
+	__u32 frame_count;
+};
+
+/**
  * DRM_MODE_FMT - printf string for &struct drm_display_mode
  */
 #define DRM_MODE_FMT    "\"%s\": %d %d %d %d %d %d %d %d %d %d 0x%x 0x%x"

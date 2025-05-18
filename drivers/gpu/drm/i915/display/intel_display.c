@@ -4504,6 +4504,10 @@ intel_crtc_copy_uapi_to_hw_state_nomodeset(struct intel_atomic_state *state,
 				  crtc_state->uapi.gamma_lut);
 	drm_property_replace_blob(&crtc_state->hw.ctm,
 				  crtc_state->uapi.ctm);
+	drm_property_replace_blob(&crtc_state->hw.region_blob,
+				  crtc_state->uapi.checksum_region.region_blob);
+	drm_property_replace_blob(&crtc_state->hw.crc_blob,
+				  crtc_state->uapi.checksum_region.crc_blob);
 }
 
 static void

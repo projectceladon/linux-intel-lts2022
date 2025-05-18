@@ -459,6 +459,17 @@ static int drm_atomic_crtc_set_property(struct drm_crtc *crtc,
 		set_out_fence_for_crtc(state->state, crtc, fence_ptr);
 	} else if (property == crtc->scaling_filter_property) {
 		state->scaling_filter = val;
+	} else if (property == crtc->checksum_region_property) {
+		ret = drm_atomic_replace_property_blob_from_id(dev,
+					&state->checksum_region.region_blob,
+					val,
+					-1, sizeof(struct drm_checksum_region),
+					&replaced);
+		state->checksum_region.region_changed |= replaced;
+		return ret;
+	} else if (property == crtc->checksum_crc_property) {
+		/* don't let user set CRC data */
+		return -EPERM;
 	} else if (crtc->funcs->atomic_set_property) {
 		return crtc->funcs->atomic_set_property(crtc, state, property, val);
 	} else {
@@ -500,7 +511,15 @@ drm_atomic_crtc_get_property(struct drm_crtc *crtc,
 		*val = 0;
 	else if (property == crtc->scaling_filter_property)
 		*val = state->scaling_filter;
-	else if (crtc->funcs->atomic_get_property)
+	else if (property == crtc->checksum_region_property)
+		*val = (state->checksum_region.region_blob)
+			? state->checksum_region.region_blob->base.id : 0;
+	else if (property == crtc->checksum_crc_property) {
+		if (crtc->funcs->update_checksum_region_crc)
+			crtc->funcs->update_checksum_region_crc(crtc);
+		*val = (state->checksum_region.crc_blob)
+			? state->checksum_region.crc_blob->base.id : 0;
+	} else if (crtc->funcs->atomic_get_property)
 		return crtc->funcs->atomic_get_property(crtc, state, property, val);
 	else
 		return -EINVAL;
