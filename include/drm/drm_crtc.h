@@ -309,6 +309,8 @@ struct drm_crtc_state {
 	 */
 	struct drm_property_blob *gamma_lut;
 
+	//struct drm_property_blob *checksum_region;
+
 	/**
 	 * @target_vblank:
 	 *
@@ -351,6 +353,21 @@ struct drm_crtc_state {
 	 * Scaling filter to be applied
 	 */
 	enum drm_scaling_filter scaling_filter;
+
+	/**
+	 * @checksum_region:
+	 *
+	 * Checksum_region properties for configuring the region and retrieving the
+	 * CRC checksum values of the region content. The region_changed is set when
+	 * a new region is set by the userspace. If not NULL, the region_blob is of
+	 * type struct drm_checksum_region and the crc_blob is of type struct
+	 * drm_checksum_crc.
+	 */
+	struct {
+		struct drm_property_blob *region_blob;
+		struct drm_property_blob *crc_blob;
+		bool region_changed: 1;
+	} checksum_region;
 
 	/**
 	 * @event:
@@ -956,6 +973,23 @@ struct drm_crtc_funcs {
 				     int *max_error,
 				     ktime_t *vblank_time,
 				     bool in_vblank_irq);
+
+	
+	/**
+	 * @update_checksum_region_crc:
+	 * 
+	 * Driver callback to update the content of CRTC CHECKSUM_CRC property.
+	 * This function fetches the latest checksum CRC values and replaces the
+	 * old crc_blob in struct drm_crtc_state.
+	 *
+	 * This callback is optional if the driver does not support any CRC
+	 * generation functionality.
+	 *
+	 * RETURNS:
+	 *
+	 * True on success, false on failure.
+	 */ 
+	bool (*update_checksum_region_crc) (struct drm_crtc *crtc);
 };
 
 /**
@@ -1230,6 +1264,17 @@ struct drm_crtc {
 	 * Initialized via drm_self_refresh_helper_init().
 	 */
 	struct drm_self_refresh_data *self_refresh_data;
+
+	/**
+	 * @checksum_region_property: property for checksum region configuration.
+	 */
+	struct drm_property *checksum_region_property;
+
+	/**
+	 * @checksum_crc_property: property for retrieving the CRC checksum
+	 * values of the content of checksum region.
+	 */
+	struct drm_property *checksum_crc_property;
 };
 
 /**
@@ -1378,5 +1423,7 @@ static inline struct drm_crtc *drm_crtc_find(struct drm_device *dev,
 
 int drm_crtc_create_scaling_filter_property(struct drm_crtc *crtc,
 					    unsigned int supported_filters);
+
+int drm_crtc_create_checksum_region_properties(struct drm_crtc *crtc);
 
 #endif /* __DRM_CRTC_H__ */

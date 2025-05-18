@@ -349,6 +349,11 @@ static void intel_crtc_copy_hw_to_uapi_state(struct intel_crtc_state *crtc_state
 				  crtc_state->hw.gamma_lut);
 	drm_property_replace_blob(&crtc_state->uapi.ctm,
 				  crtc_state->hw.ctm);
+	drm_property_replace_blob(&crtc_state->uapi.checksum_region.region_blob,
+				  crtc_state->hw.region_blob);
+	drm_property_replace_blob(&crtc_state->uapi.checksum_region.crc_blob,
+				  crtc_state->hw.crc_blob);
+
 }
 
 static void

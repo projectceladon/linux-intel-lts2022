@@ -72,6 +72,7 @@ struct vlv_s0ix_state;
 struct intel_pxp;
 
 #define GEM_QUIRK_PIN_SWIZZLED_PAGES	BIT(0)
+#define MAX_REGION_PER_PIPE 	32
 
 /* Data Stolen Memory (DSM) aka "i915 stolen memory" */
 struct i915_dsm {
@@ -380,7 +381,10 @@ struct drm_i915_private {
 	struct ttm_device bdev;
 
 	I915_SELFTEST_DECLARE(struct i915_selftest_stash selftest;)
-
+#if 0
+	struct display_region regions[MAX_REGION_PER_PIPE];
+	u32 next_region; 	/* next region to check */
+#endif
 	/*
 	 * NOTE: This is the dri1/ums dungeon, don't add stuff here. Your patch
 	 * will be rejected. Instead look for a better place.

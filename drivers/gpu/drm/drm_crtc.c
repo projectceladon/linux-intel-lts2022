@@ -955,3 +955,47 @@ int drm_crtc_create_scaling_filter_property(struct drm_crtc *crtc,
 	return 0;
 }
 EXPORT_SYMBOL(drm_crtc_create_scaling_filter_property);
+
+/**
+ * drm_crtc_create_checksum_region_properties - create new checksum_region
+ * properties
+ *
+ * @crtc: drm CRTC
+ *
+ * This function creates and attaches CHECKSUM_REGION and CHECKSUM_CRC blob
+ * properties for the given CRTC.
+ *
+ * RETURNS:
+ * Zero for success or -ENOMEM
+ */
+int drm_crtc_create_checksum_region_properties(struct drm_crtc *crtc)
+{
+	struct drm_device *dev = crtc->dev;
+	struct drm_property *region_prop, *crc_prop;
+
+	region_prop = drm_property_create(dev, DRM_MODE_PROP_BLOB,
+					"CHECKSUM_REGION", 0);
+	crc_prop = drm_property_create(dev, DRM_MODE_PROP_BLOB,
+					"CHECKSUM_CRC", 0);
+
+	if (!region_prop || !crc_prop)
+		goto fail;
+
+	drm_object_attach_property(&crtc->base, region_prop, 0);
+	drm_object_attach_property(&crtc->base, crc_prop, 0);
+
+	crtc->checksum_region_property = region_prop;
+	crtc->checksum_crc_property = crc_prop;
+
+	return 0;
+
+fail:
+	if (region_prop)
+		drm_property_destroy(dev, region_prop);
+
+	if (crc_prop)
+		drm_property_destroy(dev, crc_prop);
+
+	return -ENOMEM;
+}
+EXPORT_SYMBOL(drm_crtc_create_checksum_region_properties);
