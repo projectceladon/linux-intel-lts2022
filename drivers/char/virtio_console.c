@@ -235,6 +235,9 @@ struct port {
 
 	/* We should allow only one process to open a port */
 	bool guest_connected;
+
+	bool tiocm_updated;
+	int tiocm;
 };
 
 /* This is the very early arch-specified put chars function. */
@@ -563,6 +566,7 @@ static ssize_t __send_control_msg(struct ports_device *portdev, u32 port_id,
 	portdev->cpkt.event = cpu_to_virtio16(portdev->vdev, event);
 	portdev->cpkt.value = cpu_to_virtio16(portdev->vdev, value);
 
+	//printk("send ctl %d %d %x\n", portdev->cpkt.id, portdev->cpkt.event, portdev->cpkt.value);
 	sg_init_one(sg, &portdev->cpkt, sizeof(struct virtio_console_control));
 
 	if (virtqueue_add_outbuf(vq, sg, 1, &portdev->cpkt, GFP_ATOMIC) == 0) {
@@ -1199,6 +1203,79 @@ static void notifier_del_vio(struct hvc_struct *hp, int data)
 	hp->irq_requested = 0;
 }
 
+static void virtio_console_set_termios(struct hvc_struct *hp, const struct ktermios *old)
+{
+	struct tty_struct *tty = hp->port.tty;
+	struct port *port;
+	uint16_t value;
+
+	port = find_port_by_vtermno(hp->vtermno);
+	if (!port)
+		return;
+
+	if(!virtio_has_feature(port->portdev->vdev, VIRTIO_CONSOLE_F_UART_BE))
+		return;
+
+	if (tty->termios.c_ospeed != old->c_ospeed) {
+		value = (uint16_t)(tty->termios.c_cflag & CBAUD);
+		send_control_msg(port, VIRTIO_CONSOLE_SET_TERMIO_OBAUD, value);
+	}
+
+	if (tty->termios.c_ispeed != old->c_ispeed) {
+		value = (uint16_t)((tty->termios.c_cflag >> IBSHIFT) & CBAUD);
+		if (value == B0)
+			value = (uint16_t)(tty->termios.c_cflag & CBAUD);
+		send_control_msg(port, VIRTIO_CONSOLE_SET_TERMIO_IBAUD, value);
+	}
+
+	if ((tty->termios.c_cflag ^ old->c_cflag) & CRTSCTS) {
+		value = (tty->termios.c_cflag & CRTSCTS) ? 1 : 0;
+		send_control_msg(port, VIRTIO_CONSOLE_SET_TERMIO_CRTSCTS, value);
+	}
+}
+
+static int virtio_console_tiocmget(struct hvc_struct *hp)
+{
+	struct port *port;
+	int ret;
+
+	port = find_port_by_vtermno(hp->vtermno);
+	if (!port)
+		return -ENXIO;
+
+	if(!virtio_has_feature(port->portdev->vdev, VIRTIO_CONSOLE_F_UART_BE))
+		return -EPERM;
+
+	port->tiocm_updated = false;
+	send_control_msg(port, VIRTIO_CONSOLE_TIOCMGET, 0);
+
+	ret = wait_event_freezable(port->waitqueue, port->tiocm_updated);
+
+	if (ret < 0)
+		return ret;
+
+	return port->tiocm;
+}
+
+static int virtio_console_tiocmset(struct hvc_struct *hp, unsigned int set, unsigned int clear)
+{
+	struct port *port;
+	unsigned int value;
+
+	port = find_port_by_vtermno(hp->vtermno);
+	if (!port)
+		return -ENXIO;
+
+	if(!virtio_has_feature(port->portdev->vdev, VIRTIO_CONSOLE_F_UART_BE))
+		return -EPERM;
+
+	value = (set & (~clear));
+
+	send_control_msg(port, VIRTIO_CONSOLE_TIOCMSET, value);
+
+	return 0;
+}
+
 /* The operations for console ports. */
 static const struct hv_ops hv_ops = {
 	.get_chars = get_chars,
@@ -1206,6 +1283,9 @@ static const struct hv_ops hv_ops = {
 	.notifier_add = notifier_add_vio,
 	.notifier_del = notifier_del_vio,
 	.notifier_hangup = notifier_del_vio,
+	.hvc_set_termios = virtio_console_set_termios,
+	.tiocmget = virtio_console_tiocmget,
+	.tiocmset = virtio_console_tiocmset,
 };
 
 /*
@@ -1580,6 +1660,25 @@ static void handle_control_message(struct virtio_device *vdev,
 	}
 
 	switch (virtio16_to_cpu(vdev, cpkt->event)) {
+	case VIRTIO_CONSOLE_TIOCMGET:
+		if (!port || !is_console_port(port))
+			break;
+
+		port->tiocm = (int)cpkt->value;
+		port->tiocm_updated = true;
+
+		wake_up_interruptible(&port->waitqueue);
+
+		break;
+	case VIRTIO_CONSOLE_TIOCMGET_FAIL:
+		if (!port || !is_console_port(port))
+			break;
+
+		port->tiocm = -EPERM;
+		port->tiocm_updated = true;
+		wake_up_interruptible(&port->waitqueue);
+
+		break;
 	case VIRTIO_CONSOLE_PORT_ADD:
 		if (port) {
 			dev_dbg(&portdev->vdev->dev,
@@ -2134,6 +2233,7 @@ MODULE_DEVICE_TABLE(virtio, id_table);
 static const unsigned int features[] = {
 	VIRTIO_CONSOLE_F_SIZE,
 	VIRTIO_CONSOLE_F_MULTIPORT,
+	VIRTIO_CONSOLE_F_UART_BE,
 };
 
 static const struct virtio_device_id rproc_serial_id_table[] = {
